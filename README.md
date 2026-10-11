@@ -173,3 +173,37 @@ Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 구현했습�
 - B 계정에서 A의 메모 삭제(DELETE): HTTP 404
 - A 계정 재로그인 후 기존 메모 4건 보존: 확인
 - Supabase RLS: SELECT·INSERT·UPDATE·DELETE 정책
+
+### 4단계 최종 검증 및 저장점 기록 (2026-10-11)
+
+**최종 배포 커밋:** `97f2b41` — 4단계 메모 소유자 변경 차단
+
+**A/B 계정 접근통제**
+- A 계정: 본인 메모 4건 조회 및 가상 메모 추가·수정·삭제 성공
+- B 계정: 본인 메모 1건 조회 및 가상 메모 추가·수정·삭제 성공
+- A 계정에서 B 소유 메모 직접 조회: HTTP 404
+- B 계정에서 A 소유 메모 조회·수정·삭제: HTTP 404
+- PUT 요청에서 `owner_id` 변경 시도: HTTP 403
+- 테스트 메모 정리 후 A의 4건과 B의 1건 보존 확인
+
+**Supabase 최소 권한 및 RLS**
+- `public.vault_memos`에 대해 기존 권한 REVOKE ALL 후 필요한 CRUD 권한만 GRANT
+- `anon`: SELECT·INSERT·UPDATE·DELETE 및 기타 테이블 권한 없음
+- `authenticated`: SELECT·INSERT·UPDATE·DELETE만 허용
+- `information_schema.role_table_grants`와 `has_table_privilege` 적용 전후 비교 완료
+- RLS 정책 4개 확인: SELECT·DELETE는 USING, INSERT는 WITH CHECK, UPDATE는 USING과 WITH CHECK에 `auth.uid() = owner_id` 적용
+- 서버 API에서도 검증된 사용자 ID로 소유권 확인
+
+**100점 추가 조건 자체 점검**
+- 비로그인 `GET /api/memos`: HTTP 401 및 JSON `{"error":"unauthorized"}`
+- 배포 `/aleph.json`: 정상 접근, step 4 및 커밋 `97f2b41` 확인
+- 첫 화면 보안 헤더: `X-Content-Type-Options: nosniff` 확인
+
+**다시 실행 및 검증하는 방법**
+1. `npm run build -- --local`로 로컬 빌드를 실행합니다.
+2. GitHub `main` 브랜치를 Vercel에 배포하고 Production Ready 상태를 확인합니다.
+3. 배포 주소 `https://choi-bujang-secret-vault-pi.vercel.app/`에서 A와 B로 각각 로그인해 본인 메모만 조회되는지 확인합니다.
+4. 시험 메모를 추가·수정·삭제하고 상대방 메모 ID로 요청할 때 접근이 거부되는지 확인합니다.
+5. `npm run bundle`을 실행해 제출 JSON과 실제 자동 공격 점검 결과를 확인합니다.
+
+**판정 범위:** 위 결과는 직접 수행한 학습용 테스트 및 자체 점검 기록입니다. 공식 심판의 채점 결과는 아닙니다.
