@@ -10,7 +10,11 @@
     "jwksUrl": "https://fijeiiqdyjqmunesjpyk.supabase.co/auth/v1/.well-known/jwks.json"
   },
   "allowedRoutes": [
-    "/api/memos"
+    "GET /api/memos",
+    "POST /api/memos",
+    "GET /api/memos/:id",
+    "PUT /api/memos/:id",
+    "DELETE /api/memos/:id"
   ],
   "originalApiUrl": null,
   "restoreRoute": null
