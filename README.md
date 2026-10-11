@@ -123,3 +123,53 @@ Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 구현했습�
 \- 첫 화면 보안 헤더: `X-Content-Type-Options: nosniff` 확인
 
 \- 타인 메모 소유권 검사 및 심판 공식 판정: 미실행
+
+## 4단계 — 사용자별 메모 소유권 검증과 접근통제
+
+### 구현 내용
+
+3단계의 로그인 인증 기능을 유지하면서, 로그인한 사용자가 본인 소유 메모에만 접근하도록 서버 API에 소유권 검증을 추가했습니다.
+
+- `api/memos.mjs`: 메모 목록 조회 시 검증된 사용자 ID와 `owner_id`가 일치하는 메모만 반환합니다.
+- `api/memos/[id].mjs`: 개별 메모 조회(GET)·수정(PUT)·삭제(DELETE) 시 메모 ID와 소유자 ID를 함께 확인합니다.
+- 메모 생성(POST): 클라이언트가 전달한 소유자 정보가 아닌 검증된 로그인 사용자 ID를 `owner_id`로 저장합니다.
+- 다른 사용자 소유의 메모는 조회·수정·삭제 대상에서 제외하며, 개별 요청에는 HTTP 404를 반환합니다.
+- 비로그인 API 요청은 기존처럼 HTTP 401로 거부합니다.
+
+### Supabase GRANT 및 RLS
+
+`public.vault_memos` 테이블의 RLS가 활성화된 것을 확인했습니다.
+
+`authenticated` 역할에 SELECT·INSERT·UPDATE·DELETE 권한을 부여하고, 각 작업에 대해 `owner_id = auth.uid()` 조건을 적용했습니다.
+
+- SELECT: 본인 메모만 조회
+- INSERT: 본인 UUID를 소유자로 하는 메모만 생성
+- UPDATE: 수정 전후 모두 본인 소유 조건 확인
+- DELETE: 본인 메모만 삭제
+- `anon`: 테이블 권한 없음 확인
+
+서버 API는 서버 전용 키로 Data API에 접근하므로 RLS만 신뢰하지 않고 서버에서도 소유권 조건을 적용합니다.
+
+### 실행 및 재현 방법
+
+1. 로컬에서 `npm run build -- --local`을 실행합니다.
+2. GitHub `main` 브랜치를 Vercel에 배포하고 Production 상태가 Ready인지 확인합니다.
+3. 배포 주소 `https://choi-bujang-secret-vault-pi.vercel.app/`에 A 계정으로 로그인해 기존 가상 메모 4건을 확인합니다.
+4. B 계정으로 로그인해 A의 메모가 목록에 나타나지 않는지 확인합니다.
+5. B의 인증된 요청으로 A의 메모 ID에 GET·PUT·DELETE를 각각 실행하고 HTTP 404인지 확인합니다.
+6. A 계정으로 다시 로그인해 기존 메모가 변경되거나 삭제되지 않았는지 확인합니다.
+7. `src/attack-check.mjs`의 자동 점검으로 공개 정적 파일, 비로그인 서버 API, 비로그인 직접 Data API 접근 결과를 확인합니다.
+
+테스트에는 가상 메모만 사용하며 비밀번호, JWT, 서버 비밀키와 실제 개인정보를 기록하지 않습니다.
+
+### 4단계 실제 확인 기록 (2026-10-11)
+
+- 서버 API 소유권 필터 배포 커밋: `c225a61`
+- Vercel Production 배포: Ready 확인
+- A 계정 기존 가상 메모 4건 조회: 성공
+- B 계정에서 A의 메모 목록 조회: 노출되지 않음
+- B 계정에서 A의 메모 직접 조회(GET): HTTP 404
+- B 계정에서 A의 메모 수정(PUT): HTTP 404
+- B 계정에서 A의 메모 삭제(DELETE): HTTP 404
+- A 계정 재로그인 후 기존 메모 4건 보존: 확인
+- Supabase RLS: SELECT·INSERT·UPDATE·DELETE 정책

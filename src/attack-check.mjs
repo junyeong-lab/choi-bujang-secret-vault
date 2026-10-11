@@ -1,6 +1,6 @@
 // Do not return tokens, private keys, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2, 3].includes(config.step)) {
+  if (![1, 2, 3, 4].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 구현해 주세요.');
   }
 
@@ -102,6 +102,48 @@ export async function runAttackChecks(config) {
   const listObserved = await checkDenied(apiResponse, '목록 조회');
   const detailResponse = await request('/api/memos/00000000-0000-4000-8000-000000000000');
   const detailObserved = await checkDenied(detailResponse, '단건 조회');
+
+  if (config.step === 4) {
+    const dbUrl = new URL(
+      '/rest/v1/vault_memos?select=id',
+      config.identityProvider.issuer
+    );
+
+    const publishableKey = 'sb_publishable_iFlkHbEhjHxdGno2O31DEg_STSayiu2';
+
+    const dbResponse = await fetch(dbUrl, {
+      headers: { apikey: publishableKey },
+      redirect: 'error',
+      cache: 'no-store',
+      signal: AbortSignal.timeout(10000),
+    });
+
+    if (![401, 403].includes(dbResponse.status)) {
+      throw new Error(
+        `4단계 Data API 익명 접근 점검 실패: HTTP ${dbResponse.status}`
+      );
+    }
+
+    return [
+      staticCheck,
+      {
+        attackId: 'anonymous_api_read',
+        expected: '비로그인 메모 목록 조회 거부',
+        observed: listObserved,
+      },
+      {
+        attackId: 'anonymous_memo_detail_read',
+        expected: '비로그인 메모 단건 조회 거부',
+        observed: detailObserved,
+      },
+      {
+        attackId: 'anonymous_direct_data_api',
+        expected: 'Publishable key만 사용한 Data API 조회 거부',
+        observed: `직접 Data API 요청 거부 (HTTP ${dbResponse.status})`,
+      },
+    ];
+  }
+
   return [
     staticCheck,
     {
