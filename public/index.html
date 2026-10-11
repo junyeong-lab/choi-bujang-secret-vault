@@ -16,6 +16,16 @@
     li { border: 1px solid #51667c; border-radius: 14px; padding: 17px 19px; background: #1a2a3d; }
     strong { display: block; font-size: 18px; margin-bottom: 5px; }
     li span { color: #bfd0e5; }
+    .auth-panel { padding: 18px; border: 1px solid #51667c; border-radius: 14px; background: #1a2a3d; margin: 22px 0; }
+    .auth-panel h2 { margin: 0 0 12px; font-size: 21px; }
+    .auth-panel form { display: grid; gap: 10px; }
+    .auth-panel label { font-size: 14px; color: #bfd0e5; }
+    .auth-panel input { box-sizing: border-box; width: 100%; padding: 12px; border-radius: 8px; border: 1px solid #859ab0; background: #101a28; color: white; font: inherit; }
+    .auth-panel button { padding: 12px 18px; border: 0; border-radius: 8px; background: #8ad8df; color: #101a28; font-weight: bold; cursor: pointer; }
+    .auth-panel button:disabled { opacity: .6; cursor: wait; }
+    .auth-panel [hidden] { display: none; }
+    #auth-message { min-height: 1.5em; margin: 12px 0 0; font-size: 14px; }
+    #auth-message[data-error="true"] { color: #ffbdc7; }
   </style>
 </head>
 <body>
@@ -24,9 +34,90 @@
     <h1>점령된 자료실</h1>
     <p>메모는 공개 정적 파일이 아니라 서버 API에서 가져옵니다. 아래는 학습용 가상 자료입니다.</p>
     <div class="notice">아직 서버 API는 누구나 호출할 수 있습니다. 인증·인가는 다음 단계에서 구현합니다.</div>
+    <section class="auth-panel" aria-labelledby="auth-title">
+      <h2 id="auth-title">Supabase Auth 로그인</h2>
+      <p id="auth-state" aria-live="polite">로그인 상태 확인 중...</p>
+      <form id="login-form" hidden>
+        <label for="auth-email">이메일</label>
+        <input id="auth-email" name="email" type="email" autocomplete="username" required>
+        <label for="auth-password">비밀번호</label>
+        <input id="auth-password" name="password" type="password" autocomplete="current-password" required>
+        <button id="login-button" type="submit">로그인</button>
+      </form>
+      <button id="logout-button" type="button" hidden>로그아웃</button>
+      <p id="auth-message" role="status" aria-live="polite"></p>
+    </section>
     <ul id="notes" aria-live="polite"><li>가상 자료를 불러오는 중입니다.</li></ul>
   </main>
   <script type="module">
+    // Supabase 공식 브라우저 SDK. 공개용 URL과 publishable key만 클라이언트에 둡니다.
+    import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.117.2';
+
+    const supabase = createClient(
+      'https://fijeiiqdyjqmunesjpyk.supabase.co',
+      'sb_publishable_iFlkHbEhjHxdGno2O31DEg_STSayiu2'
+    );
+    const loginForm = document.querySelector('#login-form');
+    const logoutButton = document.querySelector('#logout-button');
+    const loginButton = document.querySelector('#login-button');
+    const authState = document.querySelector('#auth-state');
+    const authMessage = document.querySelector('#auth-message');
+
+    function message(text, error = false) {
+      authMessage.textContent = text;
+      authMessage.dataset.error = String(error);
+    }
+    function renderAuth(user) {
+      authState.textContent = user ? `로그인됨: ${user.email ?? '이메일 비공개'}` : '로그아웃 상태입니다.';
+      loginForm.hidden = Boolean(user);
+      logoutButton.hidden = !user;
+      if (user) loginForm.reset();
+    }
+
+    loginForm.addEventListener('submit', async (event) => {
+      event.preventDefault();
+      loginButton.disabled = true;
+      message('로그인 중...');
+      try {
+        const { data, error } = await supabase.auth.signInWithPassword({
+          email: loginForm.elements.email.value.trim(),
+          password: loginForm.elements.password.value,
+        });
+        if (error) throw error;
+        renderAuth(data.user);
+        message('로그인되었습니다.');
+      } catch (error) {
+        message(`로그인 실패: ${error.message ?? '잠시 후 다시 시도해 주세요.'}`, true);
+      } finally {
+        loginButton.disabled = false;
+      }
+    });
+
+    logoutButton.addEventListener('click', async () => {
+      logoutButton.disabled = true;
+      message('로그아웃 중...');
+      try {
+        const { error } = await supabase.auth.signOut();
+        if (error) throw error;
+        renderAuth(null);
+        message('로그아웃되었습니다.');
+      } catch (error) {
+        message(`로그아웃 실패: ${error.message ?? '잠시 후 다시 시도해 주세요.'}`, true);
+      } finally {
+        logoutButton.disabled = false;
+      }
+    });
+
+    supabase.auth.onAuthStateChange((_event, session) => {
+      renderAuth(session?.user ?? null);
+    });
+    const { data: authData, error: authError } = await supabase.auth.getUser();
+    renderAuth(authData?.user ?? null);
+    if (authError && authError.name !== 'AuthSessionMissingError') {
+      message(`로그인 상태 확인 실패: ${authError.message}`, true);
+    }
+
+
     const list = document.querySelector('#notes');
     try {
       const response = await fetch('/api/memos', { cache: 'no-store' });
