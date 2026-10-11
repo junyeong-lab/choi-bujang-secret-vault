@@ -73,6 +73,11 @@ export default async function handler(req, res) {
       let input;
       try { input = await jsonBody(req); } catch { return res.status(400).json({ error: 'invalid_json' }); }
       if (!validMemoInput(input)) return res.status(400).json({ error: 'invalid_memo' });
+
+      if (Object.hasOwn(input, 'owner_id')) {
+        return res.status(403).json({ error: 'owner_change_forbidden' });
+      }
+
       const upstream = await fetch(endpoint, {
         method: 'PATCH',
         headers: dbHeaders(secret, { 'Content-Type': 'application/json', Prefer: 'return=representation' }),
