@@ -56,6 +56,7 @@ export default async function handler(req, res) {
     if (req.method === 'GET') {
       endpoint.searchParams.set('select', 'id,title,content');
       endpoint.searchParams.set('order', 'created_at.asc');
+      endpoint.searchParams.set('owner_id', `eq.${identity.userId}`);
       // 3단계: 로그인만 검사합니다. 소유권 필터는 4단계에 도입합니다.
       const upstream = await fetch(endpoint, { headers: dbHeaders(secret), cache: 'no-store', signal: AbortSignal.timeout(8000) });
       if (!upstream.ok) return res.status(502).json({ error: 'upstream_unavailable' });
