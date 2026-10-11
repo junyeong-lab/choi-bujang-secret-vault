@@ -47,10 +47,10 @@ test('first attack check reads public data.json without credentials', async () =
     const [result] = await runAttackChecks(config);
     assert.equal(requestUrl, 'https://student-defense.vercel.app/data.json');
     assert.equal(options.redirect, 'error');
-    assert.match(result.observed, /확인 표시가 보임/u);
+    assert.match(result.observed, /공개 정적 파일에서 가상 메모 확인/u);
     globalThis.fetch = async () => new Response('<html>not the data</html>', { status: 200 });
     const [failed] = await runAttackChecks(config);
-    assert.match(failed.observed, /보이지 않음/u);
+    assert.match(failed.observed, /공개 정적 파일에서 가상 메모 미확인/u);
   } finally {
     globalThis.fetch = originalFetch;
   }

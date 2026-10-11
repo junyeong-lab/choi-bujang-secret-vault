@@ -207,3 +207,48 @@ Supabase Auth 이메일·비밀번호 로그인과 로그아웃을 구현했습�
 5. `npm run bundle`을 실행해 제출 JSON과 실제 자동 공격 점검 결과를 확인합니다.
 
 **판정 범위:** 위 결과는 직접 수행한 학습용 테스트 및 자체 점검 기록입니다. 공식 심판의 채점 결과는 아닙니다.
+
+## 5단계 — 자료 요청을 서버 한곳으로 모읍니다
+
+### 구현 내용
+
+- 브라우저의 메모 조회·추가·수정·삭제 요청은 Vercel 서버 함수 `/api/memos` 및 `/api/memos/:id`를 통해 처리합니다.
+- Supabase `public.vault_memos` 테이블의 `PUBLIC`, `anon`, `authenticated` 직접 권한을 철회했습니다.
+- 서버 함수의 로그인 검증, `owner_id` 기반 소유권 검사, 서버 전용 DB 접근 설정을 유지했습니다.
+- `aleph.config.json`의 `originalApiUrl`에 쿼리 없는 원본 Data API HTTPS 경로를 등록하고 `step`을 5로 변경했습니다.
+- 추가 가점 대응을 위해 브라우저의 Supabase 공개 키를 제거하고 서버 로그인·로그아웃·세션 확인 함수를 구현했습니다. 기존 Bearer 인증 경로도 보존했습니다.
+
+### 실제 검증 기록 (2026-10-11)
+
+**기존 Production 환경**
+- A 계정 메모 조회·추가·수정·삭제 성공
+- 테스트 메모 삭제 후 기존 A 메모 4건 보존
+- 권한 철회 후 `anon` 및 `authenticated`의 테이블 직접 CRUD 권한 제거 확인
+- 공개 키로 원본 Data API 직접 요청: HTTP 401
+- 비로그인 서버 메모 API 요청: HTTP 401
+
+**Preview 환경 — `test-stage5-auth`, 커밋 `e50d59f`**
+- 서버 로그인 및 새로고침 후 세션 유지 성공
+- A 계정 메모 조회·추가·수정·삭제 성공
+- 테스트 메모 삭제 후 기존 A 메모 4건 보존
+- 로그아웃 후 비로그인 메모 조회: HTTP 401
+- B 계정 본인 메모 1건만 조회, A 소유 메모 직접 조회: HTTP 404
+- 배포 HTML에서 Supabase 공개 키 및 브라우저 SDK 흔적 미확인
+- 첫 화면 응답: HTTP 200, `X-Content-Type-Options: nosniff` 확인
+
+**자동 자체 점검**
+- 공개 정적 메모 파일: HTTP 404
+- 비로그인 메모 목록 및 단건 조회: HTTP 401
+- Supabase 원본 Data API 직접 조회: HTTP 401
+- `npm run test:r5`: 2개 통과, 실패 0개
+- 로컬 빌드 및 변경된 JavaScript 문법 검사 통과
+
+### 다시 실행 및 확인하는 방법
+
+1. `npm run build -- --local`로 로컬 빌드를 실행합니다.
+2. Vercel Preview에서 A/B 계정의 로그인, 새로고침, 메모 CRUD 및 로그아웃을 확인합니다.
+3. 비로그인 메모 요청과 타인 소유 메모 요청이 각각 HTTP 401, 404로 차단되는지 확인합니다.
+4. Supabase SQL Editor에서 `public.vault_memos`의 직접 권한이 철회되어 있는지 확인합니다.
+5. `npm run bundle`로 제출 JSON과 자동 점검 결과를 확인합니다.
+
+**판정 범위:** 위 내용은 직접 수행한 자체 점검 기록입니다. 새로운 서버 인증 방식의 Production 배포 및 5단계 공식 심판 채점은 아직 진행하지 않았습니다. 기존 심판용 Bearer 인증의 실제 회귀 시험도 별도로 필요합니다.
