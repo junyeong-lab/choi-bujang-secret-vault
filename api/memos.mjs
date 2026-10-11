@@ -1,5 +1,18 @@
-// Vercel Serverless Function — 2단계 실습용 공개 읽기 API.
-// 실제 개인 데이터에는 사용하지 마세요. 인증·인가 기능은 3단계에서 추가합니다.
+import { readFileSync } from 'node:fs';
+import { createLoginVerifier } from '../src/verify-login.mjs';
+
+const config = JSON.parse(readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8'));
+let cachedVerifier;
+
+function loginVerifier(secret) {
+  if (!cachedVerifier) {
+    cachedVerifier = createLoginVerifier({ config, supabaseSecretKey: secret });
+  }
+  return cachedVerifier;
+}
+
+// 3단계: 검증된 로그인 토큰이 없으면 학습용 메모를 반환하지 않습니다.
+// 4단계에서 사용자별 소유권 인가를 별도로 구현합니다.
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
@@ -13,6 +26,16 @@ export default async function handler(req, res) {
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) {
     return res.status(503).json({ error: 'service_unavailable' });
+  }
+
+  let identity;
+  try {
+    identity = await loginVerifier(secret)(req.headers.authorization);
+  } catch {
+    return res.status(503).json({ error: 'service_unavailable' });
+  }
+  if (!identity) {
+    return res.status(401).json({ error: 'unauthorized' });
   }
 
   let endpoint;

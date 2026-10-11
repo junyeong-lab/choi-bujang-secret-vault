@@ -30,10 +30,10 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 2단계 서버 자료</div>
+    <div class="eyebrow">BYTE BACK · 3단계 로그인 보호 자료</div>
     <h1>점령된 자료실</h1>
     <p>메모는 공개 정적 파일이 아니라 서버 API에서 가져옵니다. 아래는 학습용 가상 자료입니다.</p>
-    <div class="notice">아직 서버 API는 누구나 호출할 수 있습니다. 인증·인가는 다음 단계에서 구현합니다.</div>
+    <div class="notice">서버는 로그인 토큰을 검증한 뒤에만 학습용 메모를 반환합니다. 사용자별 접근 제한은 다음 단계에서 구현합니다.</div>
     <section class="auth-panel" aria-labelledby="auth-title">
       <h2 id="auth-title">Supabase Auth 로그인</h2>
       <p id="auth-state" aria-live="polite">로그인 상태 확인 중...</p>
@@ -47,7 +47,7 @@
       <button id="logout-button" type="button" hidden>로그아웃</button>
       <p id="auth-message" role="status" aria-live="polite"></p>
     </section>
-    <ul id="notes" aria-live="polite"><li>가상 자료를 불러오는 중입니다.</li></ul>
+    <ul id="notes" aria-live="polite"><li>로그인하면 가상 자료를 볼 수 있습니다.</li></ul>
   </main>
   <script type="module">
     // Supabase 공식 브라우저 SDK. 공개용 URL과 publishable key만 클라이언트에 둡니다.
@@ -62,6 +62,8 @@
     const loginButton = document.querySelector('#login-button');
     const authState = document.querySelector('#auth-state');
     const authMessage = document.querySelector('#auth-message');
+    const list = document.querySelector('#notes');
+    let latestLoad = 0;
 
     function message(text, error = false) {
       authMessage.textContent = text;
@@ -108,36 +110,50 @@
       }
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
-      renderAuth(session?.user ?? null);
-    });
-    const { data: authData, error: authError } = await supabase.auth.getUser();
-    renderAuth(authData?.user ?? null);
-    if (authError && authError.name !== 'AuthSessionMissingError') {
-      message(`로그인 상태 확인 실패: ${authError.message}`, true);
-    }
-
-
-    const list = document.querySelector('#notes');
-    try {
-      const response = await fetch('/api/memos', { cache: 'no-store' });
-      if (!response.ok) throw new Error('서버 API 자료를 읽을 수 없습니다.');
-      const data = await response.json();
-      if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
-      list.replaceChildren(...data.notes.map(note => {
-        const item = document.createElement('li');
-        const title = document.createElement('strong');
-        const content = document.createElement('span');
-        title.textContent = note.title;
-        content.textContent = note.content;
-        item.append(title, content);
-        return item;
-      }));
-    } catch (error) {
+    function showNotes(text) {
       const item = document.createElement('li');
-      item.textContent = error.message;
+      item.textContent = text;
       list.replaceChildren(item);
     }
+
+    async function loadNotes(session) {
+      const requestNumber = ++latestLoad;
+      // Clear any previously displayed data before starting authentication checks.
+      showNotes(session?.access_token ? '가상 자료를 불러오는 중입니다.' : '로그인하면 가상 자료를 볼 수 있습니다.');
+      if (!session?.access_token) return;
+      try {
+        const response = await fetch('/api/memos', {
+          cache: 'no-store',
+          headers: { Authorization: `Bearer ${session.access_token}` },
+        });
+        if (requestNumber !== latestLoad) return;
+        if (response.status === 401) {
+          showNotes('로그인 인증이 만료되었거나 유효하지 않습니다. 다시 로그인해 주세요.');
+          return;
+        }
+        if (!response.ok) throw new Error('서버 API 자료를 읽을 수 없습니다.');
+        const data = await response.json();
+        if (requestNumber !== latestLoad) return;
+        if (!Array.isArray(data.notes)) throw new Error('자료 형식이 맞지 않습니다.');
+        list.replaceChildren(...data.notes.map(note => {
+          const item = document.createElement('li');
+          const title = document.createElement('strong');
+          const content = document.createElement('span');
+          title.textContent = note.title;
+          content.textContent = note.content;
+          item.append(title, content);
+          return item;
+        }));
+      } catch (error) {
+        if (requestNumber === latestLoad) showNotes(error.message ?? '자료를 읽을 수 없습니다.');
+      }
+    }
+
+    // The auth SDK manages session lifecycle; the server verifies every supplied JWT.
+    supabase.auth.onAuthStateChange((_event, session) => {
+      renderAuth(session?.user ?? null);
+      void loadNotes(session);
+    });
   </script>
 </body>
 </html>
