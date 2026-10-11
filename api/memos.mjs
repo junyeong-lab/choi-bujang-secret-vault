@@ -26,7 +26,18 @@ async function authenticate(req, res) {
   if (!url || !secret) { res.status(503).json({ error: 'service_unavailable' }); return null; }
   try {
     const endpoint = dbEndpoint(url);
-    const identity = await verifier(secret)(req.headers.authorization);
+    const bearer = req.headers.authorization;
+
+const cookieToken = (req.headers.cookie ?? '')
+  .split(';')
+  .map(part => part.trim())
+  .find(part => part.startsWith('vault_session='))
+  ?.slice('vault_session='.length);
+
+const authorization = bearer ??
+  (cookieToken ? `Bearer ${cookieToken}` : undefined);
+
+const identity = await verifier(secret)(authorization);
     if (!identity) { res.status(401).json({ error: 'unauthorized' }); return null; }
     return { endpoint, secret, identity };
   } catch { res.status(503).json({ error: 'service_unavailable' }); return null; }
@@ -52,6 +63,24 @@ export default async function handler(req, res) {
   const state = await authenticate(req, res);
   if (!state) return;
   const { endpoint, secret, identity } = state;
+if (req.method === 'POST' && !req.headers.authorization) {
+  let validOrigin = false;
+
+  try {
+    const origin = new URL(req.headers.origin);
+    const host = req.headers.host;
+
+    validOrigin =
+      origin.protocol === 'https:' &&
+      origin.host === host;
+  } catch {
+    validOrigin = false;
+  }
+
+  if (!validOrigin) {
+    return res.status(403).json({ error: 'invalid_origin' });
+  }
+}
   try {
     if (req.method === 'GET') {
       endpoint.searchParams.set('select', 'id,title,content');

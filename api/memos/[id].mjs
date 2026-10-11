@@ -25,7 +25,18 @@ async function authenticate(req, res) {
   if (!url || !secret) { res.status(503).json({ error: 'service_unavailable' }); return null; }
   try {
     const endpoint = dbEndpoint(url);
-    const identity = await verifier(secret)(req.headers.authorization);
+    const bearer = req.headers.authorization;
+
+const cookieToken = (req.headers.cookie ?? '')
+  .split(';')
+  .map(part => part.trim())
+  .find(part => part.startsWith('vault_session='))
+  ?.slice('vault_session='.length);
+
+const authorization = bearer ??
+  (cookieToken ? `Bearer ${cookieToken}` : undefined);
+
+const identity = await verifier(secret)(authorization);
     if (!identity) { res.status(401).json({ error: 'unauthorized' }); return null; }
     return { endpoint, secret, identity };
   } catch { res.status(503).json({ error: 'service_unavailable' }); return null; }
@@ -52,6 +63,24 @@ export default async function handler(req, res) {
   const state = await authenticate(req, res);
   if (!state) return;
   const { endpoint, secret } = state;
+
+if (['PUT', 'DELETE'].includes(req.method) && !req.headers.authorization) {
+  let validOrigin = false;
+
+  try {
+    const origin = new URL(req.headers.origin);
+    validOrigin =
+      origin.protocol === 'https:' &&
+      origin.host === req.headers.host;
+  } catch {
+    validOrigin = false;
+  }
+
+  if (!validOrigin) {
+    return res.status(403).json({ error: 'invalid_origin' });
+  }
+}
+
   const id = req.query?.id;
   // 이전 단계의 가상 메모 ID는 UUID가 아닐 수도 있어 안전한 문자열 ID를 함께 지원합니다.
   if (typeof id !== 'string' || !/^[A-Za-z0-9_-]{1,128}$/.test(id)) {
