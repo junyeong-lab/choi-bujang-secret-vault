@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { createLoginVerifier } from '../src/verify-login.mjs';
 
