@@ -308,6 +308,7 @@ Wazuh 형식의 학습용 웹 접근 경보를 분석하여 SQL 주입, 스크�
 - `xdr/web-injection/decide.mjs`: 경보를 block·alert·record로 분류하는 독립형 판정기
 - `xdr/web-injection/respond.mjs`: 15분 임시 차단 후보 생성 및 경보 로그 기록
 - `xdr/web-injection/result.json`: 경보별 판정 결과 저장
+- `xdr/web-injection/ztna-bridge.mjs`: XDR 임시 차단 규칙을 기존 ZTNA 판정기에 전달하는 학습용 연결 모듈
 
 ### 검증 결과
 
@@ -326,6 +327,10 @@ Wazuh 형식의 학습용 웹 접근 경보를 분석하여 SQL 주입, 스크�
 - 임시 차단 규칙의 근거 경보 ID 기록 확인
 - 15분 후 임시 차단 규칙 만료 확인
 - 정상·의심 이벤트 추가 차단 0건 확인
+- ZTNA 학습용 연동 테스트 3/3 PASS
+  - 공격 IP의 임시 차단 확인
+  - 정상 IP는 기존 ZTNA 정책으로 전달
+  - 15분 만료 후 기존 ZTNA 정책으로 전달
 
 ### 다시 실행하는 방법
 

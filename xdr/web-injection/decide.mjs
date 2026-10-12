@@ -24,6 +24,12 @@ const PATTERNS = Object.freeze([
     evidence: 'T1190: 외부 공개 애플리케이션의 경로 처리 취약점 악용',
     test: /경로 이탈|경로를 여러 단계 거슬러/,
   },
+  {
+    name: '명령 구분자 반복 주입 시도',
+    condition: '명령 구분자 사용 징후와 동일 출발 주소의 반복 여부',
+    evidence: 'T1190: 외부 공개 애플리케이션의 명령 주입 취약점 악용',
+    test: /명령 구분자/,
+  },
 ]);
 
 export function decide(alert) {
@@ -54,10 +60,6 @@ export function decide(alert) {
 
   const matched = PATTERNS.find(p => p.test.test(description));
 
-  // 추가 신호: T1190과 관련된 명령 구분자 반복 시도
-  const commandSeparator =
-    /명령 구분자/.test(description);
-
   const repeated =
     /반복|연속|번갈아|번 들어왔|번 나왔|번에 있습니다/.test(
       description
@@ -71,7 +73,7 @@ export function decide(alert) {
     count >= 8 &&
     level >= 10 &&
     repeated &&
-    (matched !== undefined || commandSeparator);
+    matched !== undefined;
 
   if (confirmed) {
     return {
