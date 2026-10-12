@@ -7,3 +7,6 @@ public/aleph.json
 
 # 2ë‹¨ê³„ ì›ë¬¸ SQLì€ ê³µê°œ ì €ì¥ì†Œì—ì„œ ì œì™¸
 step2_supabase_migration.sql
+
+# XDR ½ÇÇà ·Î±×´Â Git¿¡ ¿Ã¸®Áö ¾ÊÀ½
+xdr/alerts.log
