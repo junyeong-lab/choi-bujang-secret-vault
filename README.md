@@ -295,3 +295,51 @@ npm run xdr:run -- brute-force
 - 임시 차단 규칙은 실행 중인 프로세스의 메모리에 저장되므로 재시작하면 유지되지 않습니다.
 - `ztna-bridge.mjs`는 학습용 연결 모듈이며 실제 ALEPH 운영 ZTNA 엔진에는 연결되지 않았습니다.
 - 위 검증 결과는 로컬 실습 결과이며 공식 심판의 채점 결과가 아닙니다.
+
+
+## XDR-02 보너스 — 웹 주입 공격 탐지
+
+### 구현 내용
+
+Wazuh 형식의 학습용 웹 접근 경보를 분석하여 SQL 주입, 스크립트 삽입, 경로 탐색, 명령 구분자 반복 시도를 탐지하는 모듈을 구현했습니다.
+
+- `xdr/web-injection/read-alerts.mjs`: 경보에서 시각·출발 주소·계정·규칙 수준·설명 추출
+- `xdr/web-injection/patterns.json`: MITRE ATT&CK T1190 기반 탐지 패턴 4개
+- `xdr/web-injection/decide.mjs`: 경보를 block·alert·record로 분류하는 독립형 판정기
+- `xdr/web-injection/respond.mjs`: 15분 임시 차단 후보 생성 및 경보 로그 기록
+- `xdr/web-injection/result.json`: 경보별 판정 결과 저장
+
+### 검증 결과
+
+학습용 Wazuh 경보 26건을 대상으로 다음 결과를 확인했습니다.
+
+| 구분 | 결과 |
+|---|---|
+| 명확한 공격 | block 8건 |
+| 의심 이벤트 | alert 9건 |
+| 정상 이벤트 | record 9건 |
+| 정상 이벤트 오차단 | 0건 |
+
+추가 검증:
+- 읽기 모듈에서 원본 경보 26건과 추출된 경보 26건 일치
+- 판정기 문법 검사 및 import 문 없음 확인
+- 임시 차단 규칙의 근거 경보 ID 기록 확인
+- 15분 후 임시 차단 규칙 만료 확인
+- 정상·의심 이벤트 추가 차단 0건 확인
+
+### 다시 실행하는 방법
+
+저장소 루트에서 다음 명령어를 실행합니다.
+
+```powershell
+npm run xdr:run -- web-injection
+```
+
+결과는 `xdr/web-injection/result.json`에 저장됩니다.
+
+### 구현 범위 및 한계
+
+- 기존 ZTNA 판정기인 `src/decider.mjs`의 규칙은 변경하지 않았습니다.
+- 임시 차단 규칙은 실행 중인 프로세스의 메모리에만 저장됩니다.
+- `respond.mjs`는 학습용 차단 후보를 생성하며, 실제 ALEPH 운영 ZTNA 엔진과의 자동 연동은 구현하지 않았습니다.
+- 검증 결과는 로컬 실습 결과이며 공식 심판의 채점 결과는 아닙니다.
