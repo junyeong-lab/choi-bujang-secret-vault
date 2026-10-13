@@ -1,0 +1,49 @@
+name: Step 9 detector and submission verification
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout commit
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 2
+      - name: Node 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - name: Install
+        run: npm ci
+      - name: Contract detector practice
+        run: npm run detect:test
+      - name: Detector boundary and safety tests
+        run: node --test test/step9.test.mjs
+      - name: Prior decision rules (6, 7, 8)
+        run: |
+          npm run decider:test
+          npm run fixture:7
+          node --test test/step7.test.mjs test/step8.test.mjs
+      - name: Prepare ignored submission notes
+        run: |
+          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"9단계 가상 탐지 계약에 따라 동일 가명 사용자 GET 10분 120건 초과 시 burst_read 회수 제안. 실제 기기 ID/네트워크는 계약에 없어 생성하지 않음. 실제 회수와 탐지·회수 시간 측정은 미실행.",blockedAt:null},null,2)+"\n","utf8")'
+      - name: Generate submission JSON and perform existing live anonymous checks
+        run: npm run bundle
+      - name: Validate submission
+        run: |
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));const want=["device_registered","step_up_required","resource_zone"];if(x.step!==9||!x.changedFiles.includes("src/detect.mjs")||!want.every(id=>x.policyRules.includes(id))||x.attackAttempts.length<4)process.exit(1);console.log("STEP 9 verified",x.commit.slice(0,12),"rules",x.policyRules.length,"anonymous live checks",x.attackAttempts.length)'
+      - name: Archive submission artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: step9-submission
+          path: artifacts/submission.json
+          if-no-files-found: error

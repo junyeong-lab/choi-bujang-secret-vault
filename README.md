@@ -437,3 +437,33 @@ npm run bundle
 - 6단계 기기 등록 및 7단계 복합 이상 접근 `step_up`는 유지하고, 권한 없는 구역은 다시 로그인하더라도 접근을 허용하지 않습니다.
 - 이 수정은 ALEPH 판정기 정책만 변경하며, 기존 브라우저의 본인 소유 메모 목록 API나 Supabase 데이터는 그대로 유지합니다.
 - `node --test test/step7.test.mjs test/step8.test.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run bundle`로 검증합니다. 공식 심판 재채점은 별도입니다.
+
+### 8단계 공식 심판 재평가 결과
+
+- S08_OTHER_ZONE_ALLOWED 수정 후 최신 8단계 정책 커밋 `8468ffc`으로 다시 제출하여 **공식 심판 100/100점**을 확인했습니다.
+- 메모 목록이나 강사 공지 쓰기를 판정기에서 거부하고, 단건 자료의 소유권은 기존 API에서 검사하는 정책을 보존합니다.
+
+## 9단계 — 도플갱어를 찾고 권한을 거둡니다
+
+### 탐지 범위 및 계약
+
+- `src/detect.mjs`의 `detect(events)`는 9단계 `docs/DETECT_EVENTS.md`에 정의된 로컬 가상 사건을 처리합니다.
+- 계약에 정의된 입력은 `{ at, method, identity: { sub } }`뿐입니다. `GET` 조회를 **가명 주체(`identity.sub`)별**로 묶어, 시간순 정렬 후 모든 10분 슬라이딩 구간에서 조회 수를 검사합니다.
+- 같은 주체의 10분 구간 조회 수가 **120건을 초과**할 때만 `{ action: 'propose_revocation', reasonCode: 'burst_read', subject: ... }`를 반환합니다.
+- 120건 이하, 서로 다른 사용자의 조회, 10분을 초과하여 분산된 조회, GET이 아닌 동작, 유효하지 않은 사건은 `{ action: 'observe' }`로 유지합니다.
+- 응답은 탐지기 전용으로, `src/decider.mjs`의 6·7·8단계 판정 정책과 기존 5개 항목의 응답을 변경하지 않습니다.
+- 제공된 로컬 탐지 계약에는 기기 ID와 네트워크 정보가 없습니다. 따라서 가상 신호를 추가하거나 임의 기기를 지정하지 않습니다. 실제 운영 엔진에서 검증된 기기 하나만 회수하는지와 회수까지의 시간은 공식 심판에서 확인해야 하며 **학생 측 실측은 미실행**입니다.
+- 원본 사건·메모 내용·토큰·실명을 코드, 로그, 결과, 제출 묶음에 저장하지 않습니다. 개인키나 회수 API를 만들지 않았습니다.
+
+### 다시 실행하는 방법
+
+```
+npm run detect:test
+node --test test/step9.test.mjs
+npm run decider:test
+npm run fixture:7
+node --test test/step7.test.mjs test/step8.test.mjs
+npm run bundle
+```
+
+이 자체 점검의 성공은 실제 회수나 공식 심판 판정을 뜻하지 않습니다.
