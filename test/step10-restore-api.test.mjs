@@ -152,6 +152,49 @@ test('judge B can resolve exactly one own snapshot without an ID',async()=>{
   assert.equal(r.body.status,'restored');
   assert.equal(paths.length,3);
 });
+test('judge B ID-only preview is read-only; confirmed matching ID owner hash restores',async()=>{
+  const identity={kind:'judge',identity:'b',userId:owner};
+  const calls=[];
+  const transport=async (_url,init)=>{
+    const p=JSON.parse(init.body);calls.push(p);
+    assert.equal(p.p_owner_id,owner);
+    if (!p.p_apply) return {ok:true,json:async()=>({status:'preview',
+      memoId,ownerMatched:true,backupSha256:hash,currentSha256:other,wouldChange:true})};
+    return {ok:true,json:async()=>({status:'restored',memoId,
+      ownerMatched:true,contentSha256:hash})};
+  };
+  const preview=await restoreJudgeOwnedMemo({...config,identity,payload:{id:memoId},transport});
+  assert.equal(preview.status,200);
+  assert.equal(preview.body.applied,false);
+  assert.equal(preview.body.dryRun,true);
+  assert.deepEqual(preview.body.confirm,{dryRun:false,ownerId:owner,contentSha256:hash});
+  assert.equal(calls.length,1);
+  assert.equal(calls[0].p_apply,false);
+  const missing=await restoreJudgeOwnedMemo({...config,identity,
+    payload:{id:memoId,dryRun:false},transport});
+  assert.equal(missing.status,400);
+  assert.equal(calls.length,2);
+  const wrongOwner=await restoreJudgeOwnedMemo({...config,identity,
+    payload:{id:memoId,ownerId:'00000000-0000-4000-8000-000000000003',contentSha256:hash,dryRun:false},
+    transport:async()=>{throw Error('wrong owner must not reach the database')}});
+  assert.equal(wrongOwner.status,403);
+  assert.equal(calls.length,2);
+  const wrongHash=await restoreJudgeOwnedMemo({...config,identity,
+    payload:{id:memoId,ownerId:owner,contentSha256:'c'.repeat(64),dryRun:false},transport});
+  assert.equal(wrongHash.status,404);
+  assert.equal(calls.length,3);
+  const applied=await restoreJudgeOwnedMemo({...config,identity,
+    payload:{id:memoId,...preview.body.confirm},transport});
+  assert.equal(applied.status,200);
+  assert.equal(applied.body.applied,true);
+  assert.equal(applied.body.restored,true);
+  assert.equal(applied.body.id,memoId);
+  assert.equal(applied.body.ownerId,owner);
+  assert.equal(applied.body.contentSha256,hash);
+  assert.equal(calls.length,5);
+  assert.equal(calls[4].p_apply,true);
+});
+
 test('judge path fails closed: wrong identity, extra fields and multiple targets',async()=>{
   const data={kind:'judge',identity:'b',userId:owner};
   const fail=async identityAndPayload=>restoreJudgeOwnedMemo({
