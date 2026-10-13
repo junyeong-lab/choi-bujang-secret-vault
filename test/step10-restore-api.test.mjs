@@ -55,3 +55,27 @@ test('server and network errors remain closed',async()=>{
   assert.equal(r.status,502);
   assert.equal((await runRestoreForVerifiedUser({...config,userId:'arbitrary',payload:base})).status,401);
 });
+
+test('owner can request preview by memo ID, receiving hashes for explicit follow-up', async () => {
+  const r = await runRestoreForVerifiedUser({
+    ...config,payload:{memoId},
+    transport:async(_url, init) => {
+      const b=JSON.parse(init.body);
+      assert.equal(b.p_snapshot_hash,null);
+      assert.equal(b.p_expected_current_hash,null);
+      assert.equal(b.p_apply,false);
+      return {ok:true,json:async()=>({status:'preview',memoId,ownerMatched:true,
+        currentSha256:other,backupSha256:hash,wouldChange:true})};
+    }
+  });
+  assert.equal(r.status,200);
+  assert.equal(r.body.backupSha256,hash);
+  assert.equal(r.body.currentSha256,other);
+  assert.equal(validateRestorePayload({memoId,apply:true,confirm:'RESTORE_ONE_MEMO'}),null);
+});
+test('preview forged hashes are rejected',async()=>{
+  const r=await runRestoreForVerifiedUser({...config,payload:base,
+    transport:async()=>({ok:true,json:async()=>({status:'preview',memoId,
+      ownerMatched:true,currentSha256:other,backupSha256:'c'.repeat(64),wouldChange:true})})});
+  assert.equal(r.status,502);
+});

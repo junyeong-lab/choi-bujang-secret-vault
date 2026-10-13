@@ -67,3 +67,33 @@ test('post-restore normal A allows and other-zone B denies in preserved decider'
   assert.equal(unregistered.decision,'deny');
   assert.equal((await decide(suspicious)).decision,'step_up');
 });
+
+test('real isolated helper dry-run and apply restore exact test file only', () => {
+  const id = 'test/fixtures/step10-isolated-' + process.pid + '-' + Math.floor(Math.random()*1000000) + '.mjs';
+  const path = resolve(root, id);
+  const originalPolicy = readFileSync(resolve(root,'src/decider.mjs'), 'utf8');
+  const auditSentinel = readFileSync(resolve(root,'test/fixtures/step10-modified-policy.txt'), 'utf8');
+  try {
+    writeFileSync(path, changed, {flag:'wx',mode:0o600});
+    const preflight = restoreInIsolatedTestFile({
+      root, target:id, confirmedVersion:SOURCE_COMMIT,
+      expectedCurrentHash:hashPolicy(changed), apply:false
+    });
+    assert.equal(preflight.applied,false);
+    assert.equal(readFileSync(path,'utf8'),changed);
+    const applied = restoreInIsolatedTestFile({
+      root, target:id, confirmedVersion:SOURCE_COMMIT,
+      expectedCurrentHash:hashPolicy(changed), apply:true
+    });
+    assert.equal(applied.applied,true);
+    assert.equal(readFileSync(path,'utf8'),copy);
+    assert.equal(readFileSync(resolve(root,'src/decider.mjs'),'utf8'),originalPolicy);
+    assert.equal(readFileSync(resolve(root,'test/fixtures/step10-modified-policy.txt'),'utf8'),auditSentinel);
+    assert.throws(()=>restoreInIsolatedTestFile({
+      root,target:id,confirmedVersion:SOURCE_COMMIT,
+      expectedCurrentHash:hashPolicy(changed),apply:true
+    }),/TEST_POLICY_CHANGED/);
+  } finally {
+    rmSync(path,{force:true});
+  }
+});

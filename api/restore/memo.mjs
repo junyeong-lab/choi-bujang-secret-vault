@@ -30,11 +30,14 @@ function sameOrigin(req) {
 export function validateRestorePayload(value) {
   if (!value || typeof value !== 'object' || Array.isArray(value) ||
       typeof value.memoId !== 'string' || !MEMO.test(value.memoId) ||
-      (typeof value.snapshotHash !== 'string' || !HASH.test(value.snapshotHash)) ||
-      (value.expectedCurrentHash !== 'absent' && !HASH.test(value.expectedCurrentHash)) ||
+      (value.snapshotHash !== undefined && !HASH.test(value.snapshotHash)) ||
+      (value.expectedCurrentHash !== undefined && value.expectedCurrentHash !== 'absent' &&
+        !HASH.test(value.expectedCurrentHash)) ||
       (value.apply !== undefined && typeof value.apply !== 'boolean')) return null;
   const apply = value.apply === true;
-  if (apply && value.confirm !== 'RESTORE_ONE_MEMO') return null;
+  if (apply && (value.confirm !== 'RESTORE_ONE_MEMO' ||
+    typeof value.snapshotHash !== 'string' ||
+    typeof value.expectedCurrentHash !== 'string')) return null;
   // Reject any extra potentially dangerous selector; owner is the VERIFIED login id.
   if (Object.keys(value).some(k => !['memoId','snapshotHash','expectedCurrentHash','apply','confirm'].includes(k))) return null;
   return { memoId:value.memoId, snapshotHash:value.snapshotHash,
@@ -61,8 +64,8 @@ export async function runRestoreForVerifiedUser({ payload, userId, supabaseOrigi
       body:JSON.stringify({
         p_id:input.memoId,
         p_owner_id:userId,
-        p_snapshot_hash:input.snapshotHash,
-        p_expected_current_hash:input.expectedCurrentHash,
+        p_snapshot_hash:input.snapshotHash ?? null,
+        p_expected_current_hash:input.expectedCurrentHash ?? null,
         p_apply:input.apply
       }),
       cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)
@@ -77,8 +80,11 @@ export async function runRestoreForVerifiedUser({ payload, userId, supabaseOrigi
   switch (data.status) {
     case 'preview':
       if (input.apply || data.memoId!==input.memoId || data.ownerMatched!==true ||
-          !HASH.test(data.backupSha256) || !['absent'].concat([]).includes(data.currentSha256) &&
-          !HASH.test(data.currentSha256) || typeof data.wouldChange!=='boolean') {
+          !HASH.test(data.backupSha256) ||
+          (data.currentSha256 !== 'absent' && !HASH.test(data.currentSha256)) ||
+          typeof data.wouldChange!=='boolean' ||
+          (input.snapshotHash !== undefined && data.backupSha256 !== input.snapshotHash) ||
+          (input.expectedCurrentHash !== undefined && data.currentSha256 !== input.expectedCurrentHash)) {
         return {status:502,body:{error:'unexpected_response'}};
       }
       return {status:200,body:{status:'preview',memoId:input.memoId,ownerMatched:true,

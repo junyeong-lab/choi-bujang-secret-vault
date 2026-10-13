@@ -535,3 +535,8 @@ node --test test/step10-policy-diff.test.mjs
 - `npm run test:package`는 초기 생성 API 파일이 `api/ai.js`, `api/threat-intel.js` 두 개뿐이어야 한다고 가정합니다.
 - 이후 단계에서 `api/memos.mjs`, `api/notices.mjs` 등을 실제로 추가했으므로 시작 틀의 불변조건과 현재 앱 구성이 달라졌습니다. **이 시작 틀 전용 검사는 현재 단계 회귀 체크에서 제외**합니다. 최초 실행에서는 해당 조건 불일치로 실패했습니다.
 - `npm run test:r5` 및 6~9단계 실제 정책·탐지 회귀 테스트는 계속 실행합니다. 단, `test:package`가 통과했다고 보고하지 않습니다.
+
+### 복원 미리보기 사용성 보완
+- 복원 전에는 로그인한 메모 소유자가 `POST /api/restore/memo`에 `{ "memoId": "해당 메모 ID", "apply": false }`만 보내 현재/백업 SHA-256과 변경 여부를 확인할 수 있습니다. 소유권과 사본 무결성은 서버 DB에서 검증합니다.
+- **실제 복원**에는 미리보기에서 확인한 `snapshotHash`, `expectedCurrentHash`, 명시적 `apply: true`, `confirm: "RESTORE_ONE_MEMO"`가 필요합니다. 사용자가 허용하지 않은 복원은 실행하지 않았습니다.
+- 별도 격리된 `test/fixtures/` 정책 파일에 대해 실제 복원 함수 적용·검증·정리까지 시험합니다. 원본 정책과 다른 파일은 유지합니다.
