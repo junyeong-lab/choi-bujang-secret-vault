@@ -63,7 +63,7 @@ export async function runRestoreForVerifiedUser({ payload, userId, supabaseOrigi
   try {
     upstream = await transport(endpoint, {
       method:'POST',
-      headers: {apikey:secret,Authorization:'Bearer '+secret,
+      headers: {apikey:secret,...(secret.startsWith('eyJ')?{Authorization:'Bearer '+secret}:{}),
         'Content-Type':'application/json',Accept:'application/json'},
       body:JSON.stringify({
         p_id:input.memoId,
@@ -156,7 +156,7 @@ export async function restoreJudgeOwnedMemo({
     let rows;
     try {
       const response=await transport(url,{
-        headers:{apikey:secret,Authorization:'Bearer '+secret,
+        headers:{apikey:secret,...(secret.startsWith('eyJ')?{Authorization:'Bearer '+secret}:{}),
           Accept:'application/json'},
         cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)
       });
