@@ -34,6 +34,12 @@ test('invalid pinned source and hash are rejected', () => {
   assert.throws(()=>verifyBackup(copy,original,{...manifest,sourceCommit:'unknown'}),/BACKUP_INVALID/);
   assert.throws(()=>verifyBackup(copy,original,{...manifest,sourceGitBlobSha1:'0000'}),/BACKUP_INVALID/);
 });
+test('tampering with safe copy AND manifest together cannot bypass pinned source hash', () => {
+  const forgedCopy=copy.replace("let decision = 'deny';","let decision = 'allow';");
+  assert.notEqual(forgedCopy,copy);
+  const forgedManifest={...manifest,sourceGitBlobSha1:'0000000000000000000000000000000000000000'};
+  assert.throws(()=>verifyBackup(forgedCopy,forgedCopy,forgedManifest),/BACKUP_INVALID/);
+});
 test('missing copy causes fail closed', () => {
   assert.throws(()=>loadVerifiedBackup('/no-such-policy-root'),/BACKUP_OR_TEST_MISSING/);
 });
