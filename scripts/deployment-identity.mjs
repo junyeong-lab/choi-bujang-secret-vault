@@ -44,7 +44,12 @@ export function deploymentIdentity(env, config) {
     identity.identityProvider = config.identityProvider ?? null;
     identity.allowedRoutes = config.allowedRoutes ?? [];
   }
-  if (config.step >= 5) identity.originalApiUrl = config.originalApiUrl ?? null;
+  if (config.step >= 5) {
+    identity.originalApiUrl = config.originalApiUrl ?? null;
+    // Public database discovery metadata lets the judge find the submitted
+    // project's memo table. It contains a publishable key, never a secret key.
+    identity.database = config.database ?? null;
+  }
   // Publish the restoreRoute to public /aleph.json for the step-10 judge intake.
   if (config.step >= 10) identity.restoreRoute = config.restoreRoute ?? null;
   return identity;
