@@ -27,6 +27,8 @@ jobs:
         run: npm run policy:diff -- --test-policy test/fixtures/step10-modified-policy.txt
       - name: Test backup validation and safety
         run: node --test test/step10-policy-diff.test.mjs
+      - name: Test isolated policy restoration safeguards
+        run: node --test test/step10-policy-restore.test.mjs
       - name: Verify prior 6-9 stages
         run: |
           npm run decider:test
