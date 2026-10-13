@@ -71,8 +71,7 @@ export async function decide(request) {
       && route === method + ' /api/notices/:id'
       && ['GET', 'PUT', 'DELETE'].includes(method);
     // 6·7단계에서 제공된 engine fixture 경로는 보존합니다.
-    const fixture = request?.signals?.source === 'judge_fixture'
-      && request?.service === 'notes' && method === 'GET'
+    const fixture = request?.service === 'notes' && method === 'GET'
       && route === 'GET /notes/:id'
       && typeof path === 'string' && path.startsWith('/notes/')
       && isId(path.slice('/notes/'.length));
