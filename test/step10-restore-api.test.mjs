@@ -372,6 +372,27 @@ test('full handler logs rejection stages and signed judge restore/retest without
   assert.equal(restored.body.postRestoreRetest.checks.length,10);
   assert.equal(records.at(-1).stage,'post_restore_retest');
   assert.equal(records.at(-1).retestStatus,'passed');
+
+  // The two-step ID/confirm contract must never claim post-restore retests
+  // on its read-only preview, and must run them after the confirmed commit.
+  committed=false;
+  const preview=await invoke({method:'POST',headers,body:{id:memoId}});
+  assert.equal(preview.code,200);
+  assert.equal(preview.body.applied,false);
+  assert.equal(preview.body.dryRun,true);
+  assert.equal(committed,false);
+  assert.equal(preview.body.postRestoreRetest,undefined);
+  const checked=await invoke({method:'POST',headers,
+    body:{id:memoId,...preview.body.confirm}});
+  assert.equal(checked.code,200);
+  assert.equal(checked.body.status,'restored');
+  assert.equal(checked.body.applied,true);
+  assert.equal(checked.body.id,memoId);
+  assert.equal(checked.body.ownerId,owner);
+  assert.equal(checked.body.postRestoreRetest.status,'passed');
+  assert.equal(checked.body.postRestoreRetest.checks.length,10);
+  assert.equal(committed,true);
+  assert.equal(records.at(-1).retestStatus,'passed');
   const logs=JSON.stringify(records);
   for(const value of [token,owner,content,memoId,config.secret]) {
     assert.equal(logs.includes(value),false);
