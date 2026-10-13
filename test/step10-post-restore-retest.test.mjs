@@ -103,3 +103,19 @@ test('judge restoration without memoId in request still retests restored memo ID
   assert.deepEqual(seen,[memoId]);
   assert.equal(r.body.postRestoreRetest.status,'passed');
 });
+
+test('verified identical backup reruns real checks, while preserving no-write status',async()=>{
+  let count=0;
+  const candidate={status:200,body:{status:'already_matching',memoId,contentSha256:hash}};
+  const answer=await attachPostRestoreRetests({
+    restoreResult:candidate,authorization,memoId,publicAppUrl,
+    retester:async({expectedContentHash})=>{
+      count++;
+      assert.equal(expectedContentHash,hash);
+      return {status:'passed',checks:[{id:'owner_read',result:'passed',observed:'HTTP_200_HASH_MATCH'}]};
+    }
+  });
+  assert.equal(count,1);
+  assert.equal(answer.body.status,'already_matching');
+  assert.equal(answer.body.postRestoreRetest.status,'passed');
+});
