@@ -14,13 +14,16 @@ function noCache(res) {
   res.setHeader('X-Content-Type-Options', 'nosniff');
   res.setHeader('Allow', 'POST');
 }
-function sessionAuth(req) {
+export function sessionAuth(req) {
+  // Explicit Authorization takes precedence over browser cookies, as in /api/memos.
+  const auth = req.headers?.authorization;
+  if (typeof auth==='string' && auth.trim()) {
+    return { authorization:auth, fromCookie:false };
+  }
   const cookies = typeof req.headers?.cookie === 'string' ? req.headers.cookie : '';
   const token = cookies.split(';').map(x=>x.trim())
     .find(x=>x.startsWith('vault_session='))?.slice('vault_session='.length);
-  if (token) return { authorization:'Bearer '+token, fromCookie:true };
-  const auth = req.headers?.authorization;
-  return { authorization:typeof auth==='string' ? auth : undefined, fromCookie:false };
+  return { authorization:token ? 'Bearer '+token : undefined, fromCookie:!!token };
 }
 function sameOrigin(req) {
   try {
