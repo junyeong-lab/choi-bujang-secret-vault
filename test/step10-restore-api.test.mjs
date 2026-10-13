@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo } from '../api/restore/memo.mjs';
+import { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo,judgeRestoreDiagnostic } from '../api/restore/memo.mjs';
 const memoId='sample-note-5';
 const hash='a'.repeat(64),other='b'.repeat(64);
 const owner='00000000-0000-4000-8000-000000000001';
@@ -150,4 +150,20 @@ test('judge preflight refuses absent backup or no actual changes without writing
   });
   assert.equal(same.body.status,'already_matching');
   assert.equal(writes,0);
+});
+
+test('diagnostics distinguish backup, concurrency, and unexecuted retest without sensitive data',()=>{
+  const lookup=judgeRestoreDiagnostic({status:404,body:{error:'backup_not_found'}});
+  assert.deepEqual(lookup,{stage:'backup_lookup',retestExecuted:false,retestStatus:'not_run'});
+  const changed=judgeRestoreDiagnostic({status:409,body:{error:'current_changed'}});
+  assert.equal(changed.stage,'concurrent_change');
+  const failed=judgeRestoreDiagnostic({status:200,body:{status:'restored',
+    postRestoreRetest:{status:'failed',checks:[{id:'retest_execution',result:'failed'}]}}});
+  assert.equal(failed.stage,'post_restore_retest');
+  assert.equal(failed.retestExecuted,true);
+  assert.equal(failed.retestStatus,'failed');
+  const absent=judgeRestoreDiagnostic({status:200,body:{status:'restored'}});
+  assert.equal(absent.stage,'post_restore_retest_not_executed');
+  assert.equal(absent.retestExecuted,false);
+  assert.equal(JSON.stringify([lookup,changed,failed,absent]).includes('owner_id'),false);
 });
