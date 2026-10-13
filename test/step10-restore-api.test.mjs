@@ -30,6 +30,29 @@ test('uses ONLY authenticated identity as owner, no content in response',async()
   assert.equal(request.p_apply,false);
   assert.equal(JSON.stringify(r).includes('content'),false);
 });
+test('Supabase new-format server key is sent as apikey, never as a fake JWT',async()=>{
+  let checked=0;
+  const secret='sb_secret_TEST_ONLY';
+  const r=await runRestoreForVerifiedUser({...config,secret,payload:base,
+    transport:async(_url,init)=>{
+      assert.equal(init.headers.apikey,secret);
+      assert.equal(Object.hasOwn(init.headers,'Authorization'),false);
+      checked++;
+      return {ok:true,json:async()=>({status:'preview',memoId,
+        ownerMatched:true,backupSha256:hash,currentSha256:other,wouldChange:true})};
+    }});
+  assert.equal(r.status,200);
+  assert.equal(checked,1);
+  const missing=await restoreJudgeOwnedMemo({...config,secret,
+    identity:{kind:'judge',identity:'b',userId:owner},payload:{},
+    transport:async(_url,init)=>{
+      assert.equal(init.headers.apikey,secret);
+      assert.equal(Object.hasOwn(init.headers,'Authorization'),false);
+      return {ok:true,json:async()=>[]};
+    }});
+  assert.equal(missing.status,404);
+});
+
 test('preview is not incorrectly reported as restoration',async()=>{
   const r=await runRestoreForVerifiedUser({...config,payload:{...base,apply:true,confirm:'RESTORE_ONE_MEMO'},
     transport:async()=>({ok:true,json:async()=>({status:'preview',memoId,ownerMatched:true,
