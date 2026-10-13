@@ -509,3 +509,24 @@ node --test test/step10-policy-diff.test.mjs
 ```json
 {"memoId":"<해당 메모 ID>","snapshotHash":"<사본 SHA-256>","expectedCurrentHash":"<현재 내용 SHA-256>","apply":false}
 ```
+
+### 제작 4 — 1~9단계 정상·금지 요청 재점검 순서
+
+1. 기존 1~5단계 앱·패키지 회귀 테스트: `npm run test:r5`, `npm run test:package`. 로그인 화면 및 실제 A/B 브라우저 사용은 별도 직접 확인 대상입니다.
+2. 등록·미등록 기기 (6단계), 복합 이상 접속 `step_up` (7단계), 메모 목록 및 강사 쓰기 거부 (8단계): `npm run decider:test`, `npm run fixture:7`, `node --test test/step7.test.mjs test/step8.test.mjs`.
+3. 정상 120회 이하 조회 유지 및 동일 가명 사용자 폭주 탐지 (9단계): `npm run detect:test`, `node --test test/step9.test.mjs`.
+4. 안전 정책 사본 검증과 차이 비교 (10단계): `npm run policy:diff`, `node --test test/step10-policy-diff.test.mjs test/step10-policy-restore.test.mjs`. 정책 복원은 시험 파일에 한정합니다.
+5. 메모 복원 API: `node --test test/step10-restore-api.test.mjs`, 데이터베이스 `step10_restore_one_memo(..., false)`의 미리보기 비교. 복원 대상의 ID·소유자·내용 해시 검증.
+6. 읽기 전용 익명 접근 점검 및 `npm run bundle` (Actions에서 실행). 비로그인 메모 조회/상세 및 DB 직접 조회가 거부되는지 재확인합니다.
+7. **미실행 항목은 그대로 표시**: 침해 전 자동 백업 없음, 실제 메모 파손·복원/감사 기록 삽입, 브라우저 A/B 계정 간 실제 교차 테스트 및 운영 정책 실제 변경·복원은 미실행입니다.
+
+### 사전 백업 확인(직접 조사)
+- Supabase 무료 플랜 자동 백업은 제공되지 않으며, 기존 복원 가능한 침해 전 사본을 확인하지 못했습니다.
+- 본 단계에서 만든 비공개 스냅숏은 **기존 B 가상 메모 1건의 현재 상태 기준**으로, 침해 전 사본이라고 과장하지 않습니다.
+- DB에서 대상 1건의 ID·소유자·내용 SHA-256이 비공개 사본과 일치하고 미리보기 요청이 통과했으며, 메모 총 5건/복원 실행 감사 0건으로 확인했습니다.
+- 백업과 복원 API는 운영에 공개할 필요가 있을 때만 사용하는 보호 경로이며, 개인키·메모 본문은 GitHub/Actions/제출 묶음에 기록하지 않습니다.
+
+### 10단계 저장점 및 제출
+- `aleph.config.json`: `step=10`, `restoreRoute=POST /api/restore/memo`. 기존 `judgeIssuer`, 로그인 발급자, 원본 API URL, 기존 허용 경로는 유지합니다.
+- GitHub Actions `Step 10 backup recovery validation and submission`은 각 테스트와 `npm run bundle`을 실행하고 `step10-submission`이라는 결과물을 생성합니다.
+- 공식 심판의 복구 성공 여부는 **미확인**이며, 학생 자체 테스트와 구분합니다.

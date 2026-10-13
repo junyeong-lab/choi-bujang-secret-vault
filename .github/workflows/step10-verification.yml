@@ -1,0 +1,62 @@
+name: Step 10 backup recovery validation and submission
+
+on:
+  push:
+    branches: [step10-recovery, main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - name: Checkout pinned Git history
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify backup and comparison with unchanged policy
+        run: npm run policy:diff
+      - name: Verify test-only altered policy scope before restoration
+        run: npm run policy:diff -- --test-policy test/fixtures/step10-modified-policy.txt
+      - name: Validate policy backup, restore, and fail-closed boundaries
+        run: node --test test/step10-policy-diff.test.mjs test/step10-policy-restore.test.mjs
+      - name: Validate single-memo restore endpoint and no-leak guard
+        run: node --test test/step10-restore-api.test.mjs
+      - name: 1-5 early application package regression
+        run: |
+          npm run test:r5
+          npm run test:package
+      - name: 6-8 device, anomaly, resource-zone policy regression
+        run: |
+          npm run decider:test
+          npm run fixture:7
+          node --test test/step7.test.mjs test/step8.test.mjs
+      - name: 9 revocation-proposal and normal-user regression
+        run: |
+          npm run detect:test
+          node --test test/step9.test.mjs
+      - name: XDR supplementary regression
+        run: node --test test/xdr-run.test.mjs
+      - name: Prepare excluded submission notes
+        run: |
+          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"10단계: 9단계 검증된 안전 정책 사본의 커밋 및 지문 검증, 별도 시험 정책의 변경 사전 확인과 제한 복원, B 가상 메모 1건의 비공개 현재 상태 사본 및 POST 단건 복원. 정책 미리보기와 DB 비파괴 미리보기 검증. 기존 DB 메모 5건 변경 없음, 실제 메모 변형 및 원상 복원은 실행하지 않음.",blockedAt:null},null,2)+"\n","utf8")'
+      - name: Build submission bundle using live anonymous checks
+        run: npm run bundle
+      - name: Check step 10 bundle contents
+        run: |
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==10||x.restoreRoute!=="POST /api/restore/memo"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==4)process.exit(1);console.log("STEP10",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
+      - name: Archive submission JSON
+        uses: actions/upload-artifact@v4
+        with:
+          name: step10-submission
+          path: artifacts/submission.json
+          if-no-files-found: error
