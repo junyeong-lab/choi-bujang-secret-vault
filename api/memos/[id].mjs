@@ -17,7 +17,7 @@ function dbEndpoint(url) {
   return endpoint;
 }
 function dbHeaders(secret, extra = {}) {
-  return { apikey: secret, Authorization: `Bearer ${secret}`, Accept: 'application/json', ...extra };
+  return { apikey: secret, ...(secret.startsWith('eyJ') ? { Authorization: `Bearer ${secret}` } : {}), Accept: 'application/json', ...extra };
 }
 async function authenticate(req, res) {
   const url = process.env.SUPABASE_URL;
