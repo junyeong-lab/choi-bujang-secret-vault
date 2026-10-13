@@ -145,7 +145,7 @@ export async function restoreJudgeOwnedMemo({
   }
   const entries=[obj.memoId,obj.id,obj.memo_id,obj.noteId]
     .filter(x=>x!==undefined);
-  if (entries.length>1 && !entries.every(x=>x===entries[0])) {
+  if (entries.length>1) {
     return {status:400,body:{error:'invalid_restore_request'}};
   }
   let memoId=entries[0];
