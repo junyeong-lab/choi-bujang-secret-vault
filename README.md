@@ -467,3 +467,24 @@ npm run bundle
 ```
 
 이 자체 점검의 성공은 실제 회수나 공식 심판 판정을 뜻하지 않습니다.
+
+### 9단계 공식 심판 결과
+- `0a56698` 제출 후 **공식 심판 100/100점**을 사용자로부터 확인했습니다.
+
+## 10단계 — 백업에서 자료실을 되살립니다 (제작 1: 안전 사본 차이 확인)
+
+- `step10-recovery` 작업 브랜치에서 **정책 사본 검증과 읽기 전용 차이 비교**만 구현합니다.
+- 안전 사본: `backup/step10/safe-decider.mjs`. 9단계 만점 당시 Git 커밋 `0a56698765f6fb478c99957ef79ab47256c70a65`의 `src/decider.mjs`와 Git blob 지문 `55192826188e2842cf8b025d9a935c278f067909`가 일치해야 비교를 시작합니다.
+- 사본이 없거나 변조·원본 검증에 실패하면 작업을 중단합니다. 운영 `src/decider.mjs`, Supabase 자료, 감사 기록은 수정하지 않습니다.
+- 현재 정책(`src/decider.mjs`) 또는 별도 시험 파일(`test/fixtures/step10-modified-policy.txt`)과 비교하여 변경 구간·줄 수만 출력합니다. 정책 본문 및 개인정보는 로그에 출력하지 않습니다.
+- 이번 단계는 **정책 코드 사본**만 해당됩니다. Supabase 무료 플랜에는 자동 백업이 없으며 검증된 침해 전 비공개 메모 사본은 아직 없습니다. 메모 복원은 미실행입니다.
+
+### 제작 1 직접 확인 명령
+
+```
+npm run policy:diff
+npm run policy:diff -- --test-policy test/fixtures/step10-modified-policy.txt
+node --test test/step10-policy-diff.test.mjs
+```
+
+기본 비교는 **0구간**이어야 하며, 시험용 변형 파일 비교는 **1구간** 차이가 표시되어야 합니다. 실제 복원·정책 적용·다른 단계 회귀 검증은 다음 제작 단계에서 진행합니다.

@@ -1,0 +1,9 @@
+{
+  "schema": "aleph.step10.safe-policy.v1",
+  "sourceCommit": "0a56698765f6fb478c99957ef79ab47256c70a65",
+  "sourcePath": "src/decider.mjs",
+  "safeCopyPath": "backup/step10/safe-decider.mjs",
+  "sourceGitBlobSha1": "55192826188e2842cf8b025d9a935c278f067909",
+  "scope": "정책 파일만. 실제 메모·감사 이력 미포함",
+  "provenance": "9단계 공식 심판 100점 사용자 확인 및 Git 객체 지문"
+}
