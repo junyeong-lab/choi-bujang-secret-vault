@@ -5,6 +5,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { hashPolicy, planTestRestore, restoreInIsolatedTestFile } from '../scripts/policy-restore.mjs';
 import { loadVerifiedBackup, SOURCE_COMMIT } from '../scripts/policy-diff.mjs';
+import * as srcRestore from '../src/policy-restore.mjs';
 import { decide } from '../src/decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 import { detect } from '../src/detect.mjs';
@@ -120,4 +121,14 @@ test('real isolated restore then repeat allowed and forbidden checks', async () 
   } finally {
     rmSync(path,{force:true});
   }
+});
+
+test('src/policy-restore entry point keeps original policy restore guards', () => {
+  assert.equal(srcRestore.restoreInIsolatedTestFile,restoreInIsolatedTestFile);
+  assert.equal(srcRestore.planTestRestore,planTestRestore);
+  assert.equal(srcRestore.hashPolicy,hashPolicy);
+  assert.throws(()=>srcRestore.restoreInIsolatedTestFile({
+    target:'src/decider.mjs',confirmedVersion:SOURCE_COMMIT,
+    expectedCurrentHash:hashPolicy(copy),apply:true
+  }),/TEST_TARGET_ONLY/);
 });
