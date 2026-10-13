@@ -187,6 +187,24 @@ export async function restoreJudgeOwnedMemo({
   });
 }
 
+// Stage 10 judge-only diagnostics: output verified stage/status only, never identities or note content.
+export function judgeRestoreDiagnostic(result) {
+  const code=result?.body?.error;
+  const restored=result?.body?.status==='restored';
+  const retest=result?.body?.postRestoreRetest;
+  let stage='restore_request';
+  if (code==='backup_not_found') stage='backup_lookup';
+  else if (code==='backup_invalid') stage='backup_integrity';
+  else if (code==='current_changed') stage='concurrent_change';
+  else if (code==='upstream_unavailable' || code==='service_unavailable') stage='upstream';
+  else if (code==='unexpected_response') stage='upstream_response';
+  else if (restored) stage=retest ? 'post_restore_retest' : 'post_restore_retest_not_executed';
+  else if (result?.body?.status==='already_matching') stage='no_restore_needed';
+  else if (result?.body?.status==='preview') stage='preview_only';
+  return {stage,retestExecuted:!!retest,
+    retestStatus:retest?.status ?? 'not_run'};
+}
+
 export default async function handler(req,res) {
   noCache(res);
   if (req.method!=='POST') return res.status(405).json({error:'method_not_allowed'});
@@ -215,6 +233,11 @@ export default async function handler(req,res) {
       restoreResult:result,authorization,memoId:result.body?.memoId,
       publicAppUrl:config.publicAppUrl
     });
+    if (identity.kind==='judge') {
+      return res.status(completed.status).json({
+        ...completed.body,restoreDiagnostic:judgeRestoreDiagnostic(completed)
+      });
+    }
     return res.status(completed.status).json(completed.body);
   } catch {
     return res.status(502).json({error:'upstream_unavailable'});
