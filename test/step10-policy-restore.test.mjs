@@ -8,6 +8,7 @@ import { loadVerifiedBackup, SOURCE_COMMIT } from '../scripts/policy-diff.mjs';
 import { decide } from '../src/decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 
+const root = process.cwd();
 const { copy } = loadVerifiedBackup();
 const changed = copy.replace("let decision = 'deny';", "let decision = 'allow';");
 test('preflight shows exact single-line change and pinned version', () => {
@@ -70,9 +71,9 @@ test('post-restore normal A allows and other-zone B denies in preserved decider'
 
 test('real isolated helper dry-run and apply restore exact test file only', () => {
   const id = 'test/fixtures/step10-isolated-' + process.pid + '-' + Math.floor(Math.random()*1000000) + '.mjs';
-  const path = resolve(root, id);
-  const originalPolicy = readFileSync(resolve(root,'src/decider.mjs'), 'utf8');
-  const auditSentinel = readFileSync(resolve(root,'test/fixtures/step10-modified-policy.txt'), 'utf8');
+  const path = join(root, id);
+  const originalPolicy = readFileSync(join(root,'src/decider.mjs'), 'utf8');
+  const auditSentinel = readFileSync(join(root,'test/fixtures/step10-modified-policy.txt'), 'utf8');
   try {
     writeFileSync(path, changed, {flag:'wx',mode:0o600});
     const preflight = restoreInIsolatedTestFile({
