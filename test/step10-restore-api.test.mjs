@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateRestorePayload,runRestoreForVerifiedUser } from '../api/restore/memo.mjs';
+import { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo } from '../api/restore/memo.mjs';
 const memoId='sample-note-5';
 const hash='a'.repeat(64),other='b'.repeat(64);
 const owner='00000000-0000-4000-8000-000000000001';
@@ -78,4 +78,76 @@ test('preview forged hashes are rejected',async()=>{
     transport:async()=>({ok:true,json:async()=>({status:'preview',memoId,
       ownerMatched:true,currentSha256:other,backupSha256:'c'.repeat(64),wouldChange:true})})});
   assert.equal(r.status,502);
+});
+
+test('judge B preview THEN single optimistic-locked restore (no supplied hashes)',async()=>{
+  const calls=[];
+  const data={kind:'judge',identity:'b',userId:owner};
+  const r=await restoreJudgeOwnedMemo({
+    ...config,identity:data,payload:{memoId},
+    transport:async(_url,init)=>{
+      const p=JSON.parse(init.body); calls.push(p);
+      if(!p.p_apply)return {ok:true,json:async()=>({status:'preview',
+        memoId,ownerMatched:true,backupSha256:hash,currentSha256:other,wouldChange:true})};
+      return {ok:true,json:async()=>({status:'restored',memoId,
+        ownerMatched:true,contentSha256:hash})};
+    }
+  });
+  assert.equal(r.status,200);
+  assert.equal(r.body.status,'restored');
+  assert.equal(calls.length,2);
+  assert.equal(calls[0].p_apply,false);
+  assert.equal(calls[1].p_apply,true);
+  assert.equal(calls[1].p_owner_id,owner);
+  assert.equal(calls[1].p_snapshot_hash,hash);
+  assert.equal(calls[1].p_expected_current_hash,other);
+});
+test('judge B can resolve exactly one own snapshot without an ID',async()=>{
+  const data={kind:'judge',identity:'b',userId:owner};
+  const paths=[];
+  const r=await restoreJudgeOwnedMemo({
+    ...config,identity:data,payload:{},
+    transport:async(url,init)=>{
+      paths.push(new URL(url).pathname);
+      if(new URL(url).pathname.endsWith('/step10_memo_snapshots')){
+        assert.equal(new URL(url).searchParams.get('owner_id'),'eq.'+owner);
+        return {ok:true,json:async()=>[{memo_id:memoId}]};
+      }
+      const p=JSON.parse(init.body);
+      return {ok:true,json:async()=>p.p_apply ?
+        {status:'restored',memoId,ownerMatched:true,contentSha256:hash}:
+        {status:'preview',memoId,ownerMatched:true,
+          backupSha256:hash,currentSha256:other,wouldChange:true}};
+    }
+  });
+  assert.equal(r.body.status,'restored');
+  assert.equal(paths.length,3);
+});
+test('judge path fails closed: wrong identity, extra fields and multiple targets',async()=>{
+  const data={kind:'judge',identity:'b',userId:owner};
+  const fail=async identityAndPayload=>restoreJudgeOwnedMemo({
+    ...config, ...identityAndPayload,
+    transport:async()=>{throw Error('must_not_reach_database');}
+  });
+  assert.equal((await fail({identity:{...data,identity:'a'},payload:{memoId}})).status,403);
+  assert.equal((await fail({identity:{kind:'student',userId:owner},payload:{memoId}})).status,403);
+  assert.equal((await fail({identity:data,payload:{memoId,owner_id:owner}})).status,400);
+  assert.equal((await fail({identity:data,payload:{id:memoId,memoId}})).status,400);
+});
+test('judge preflight refuses absent backup or no actual changes without writing',async()=>{
+  const identity={kind:'judge',identity:'b',userId:owner};
+  let writes=0;
+  const missing=await restoreJudgeOwnedMemo({...config,identity,payload:{},
+    transport:async()=>({ok:true,json:async()=>[]})});
+  assert.equal(missing.status,404);
+  const same=await restoreJudgeOwnedMemo({...config,identity,payload:{memoId},
+    transport:async(_url,init)=>{
+      const p=JSON.parse(init.body);
+      if(p.p_apply)writes++;
+      return {ok:true,json:async()=>({status:'preview',memoId,
+        ownerMatched:true,backupSha256:hash,currentSha256:hash,wouldChange:false})};
+    }
+  });
+  assert.equal(same.body.status,'already_matching');
+  assert.equal(writes,0);
 });
