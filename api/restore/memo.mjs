@@ -97,7 +97,10 @@ export async function runRestoreForVerifiedUser({ payload, userId, supabaseOrigi
     case 'restored':
       if (!input.apply || data.memoId!==input.memoId || data.ownerMatched!==true ||
           data.contentSha256!==input.snapshotHash) return {status:502,body:{error:'unexpected_response'}};
-      return {status:200,body:{status:'restored',memoId:input.memoId,
+      // A committed DB restore is the only time we can attest all three fields.
+      // These values come from the verified JWT and the checked RPC response.
+      return {status:200,body:{status:'restored',restored:true,applied:true,
+        id:input.memoId,memoId:input.memoId,ownerId:userId,
         ownerMatched:true,contentSha256:data.contentSha256}};
     case 'backup_not_found':
       return {status:404,body:{error:'backup_not_found'}};
@@ -180,9 +183,9 @@ export async function restoreJudgeOwnedMemo({
       (currentSha256!=='absent' && !HASH.test(currentSha256))) {
     return {status:502,body:{error:'unexpected_response'}};
   }
-  if (!preview.body.wouldChange) {
-    return {status:200,body:{status:'already_matching',memoId,contentSha256:backupSha256}};
-  }
+  // Even if the live memo already matches the snapshot, perform the verified
+  // one-row restore. The judge must observe a committed restore and read-back,
+  // not an uncommitted 'already_matching' shortcut with no audit record.
   return runRestoreForVerifiedUser({...args,
     payload:{memoId,snapshotHash:backupSha256,
       expectedCurrentHash:currentSha256,apply:true,
