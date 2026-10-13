@@ -9,16 +9,26 @@ export const safeResponseHeaders = res => {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
 };
+// Keep the same vault_session cookie interpretation as /api/auth/session.
+// Cookie is the browser's authenticated session. External engines without one
+// may send a verified Authorization bearer through the existing verifier.
+export function noticeAuthorization(req) {
+  const cookieHeader = typeof req?.headers?.cookie === 'string' ? req.headers.cookie : '';
+  const cookie = cookieHeader.split(';').map(part => part.trim())
+    .find(part => part.startsWith('vault_session='))
+    ?.slice('vault_session='.length);
+  if (cookie) return 'Bearer ' + cookie;
+  const bearer = req?.headers?.authorization;
+  return typeof bearer === 'string' && bearer.length > 0 ? bearer : undefined;
+}
+
 export async function authenticateNotice(req, res) {
   const url = process.env.SUPABASE_URL;
   const secret = process.env.SUPABASE_SECRET_KEY;
   if (!url || !secret) { res.status(503).json({ error: 'service_unavailable' }); return null; }
   try {
     cachedVerifier ??= createLoginVerifier({ config, supabaseSecretKey: secret });
-    const cookie = (req.headers?.cookie ?? '').split(';').map(s => s.trim())
-      .find(s => s.startsWith('vault_session='))?.slice('vault_session='.length);
-    const authorization = req.headers?.authorization ?? (cookie ? 'Bearer ' + cookie : undefined);
-    const identity = await cachedVerifier(authorization);
+    const identity = await cachedVerifier(noticeAuthorization(req));
     if (!identity) { res.status(401).json({ error: 'unauthorized' }); return null; }
     return { identity, secret, origin: new URL(url).origin };
   } catch {

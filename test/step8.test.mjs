@@ -3,7 +3,7 @@ import { test } from 'node:test';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
 import { decide } from '../src/decider.mjs';
 import { memoResourceId, noticeResourceId } from '../src/resource-ids.mjs';
-import { validNotice } from '../src/notice-access.mjs';
+import { validNotice, noticeAuthorization } from '../src/notice-access.mjs';
 
 const { normal } = fixtureRequests();
 const input = (method, path, route) => ({ ...normal, method, path, route, signals: { source: 'none' } });
@@ -28,4 +28,20 @@ test('registered device remains required', async () => {
 test('notice write input validation ignores client role', () => {
   assert.equal(validNotice({title:'공지',body:'연습',role:'instructor'}),true);
   assert.equal(validNotice({title:'',body:'연습'}),false);
+});
+
+test('notice API accepts same vault_session cookie as existing session API', () => {
+  const req = { headers: { cookie: 'other=1; vault_session=fixture.part.sig; mode=1' } };
+  assert.equal(noticeAuthorization(req), 'Bearer fixture.part.sig');
+});
+test('a browser cookie takes priority over an unrelated authorization header', () => {
+  const req = { headers: { cookie: 'vault_session=fixture.part.sig', authorization: 'not-a-bearer' } };
+  assert.equal(noticeAuthorization(req), 'Bearer fixture.part.sig');
+});
+test('engine bearer without cookie is preserved', () => {
+  const req = { headers: { authorization: 'Bearer fixture.part.sig' } };
+  assert.equal(noticeAuthorization(req), 'Bearer fixture.part.sig');
+});
+test('requests without cookie or bearer remain unauthenticated', () => {
+  assert.equal(noticeAuthorization({ headers: {} }), undefined);
 });

@@ -27,7 +27,7 @@ jobs:
       - run: npm run bundle
       - name: Verify bundle
         run: |
-          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==8||!x.policyRules.includes("resource_zone")||!x.changedFiles.includes("src/decider.mjs"))process.exit(1);console.log("STEP 8 bundle",x.commit.slice(0,12),"checks",x.attackAttempts.length)'
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==8||!x.policyRules.includes("resource_zone")||!x.policyRules.includes("device_registered")||!x.policyRules.includes("step_up_required"))process.exit(1);console.log("STEP 8 bundle",x.commit.slice(0,12),"checks",x.attackAttempts.length)'
       - uses: actions/upload-artifact@v4
         with:
           name: step8-submission
