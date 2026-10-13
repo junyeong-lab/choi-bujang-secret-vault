@@ -373,4 +373,30 @@ npm run decider:test
 ### 저장점 기록
 
 - 6단계 규칙 및 제출 설정 반영. `npm run decider:test`는 GitHub에 반영하기 전 동일 코드와 저장소 테스트 스크립트의 격리 복제본에서 2개 항목 통과를 확인했습니다.
-- GitHub 저장소에서 직접 `npm run bundle`을 실행하거나 공식 심판에 제출한 상태는 아닙니다. 제출 묶음은 별도 실행으로 확인해야 합니다.
+- 6단계 GitHub Actions에서 `npm run decider:test`와 `npm run bundle`이 성공했으며, 사용자가 공식 심판 100점을 확인했습니다. 6단계 최종 검증 커밋: `67fb3c6`.
+
+## 7단계 — 평소와 다른 접속은 다시 확인합니다
+
+### 구현한 정책과 입력 출처
+
+- `src/decider.mjs`: 6단계 `device_registered` 규칙 보존. 미등록 기기는 기존대로 `deny` / `device_not_registered`입니다.
+- `signals.source === 'judge_fixture'`인 **심판 가상 사건**에서만 시각·네트워크 조합을 평가합니다. 실제 엔진 요청은 현재 `source: 'none'`, 지역·네트워크는 `unknown`이며, 가상 신호를 실제 위치 증거로 취급하지 않습니다.
+- 가상 사건의 이른 시각(0~5시), 평소와 다른 네트워크(`unusual`), 최근 300초 내 10회 이상의 `risk_signal`이 **모두** 있는 경우 `step_up` / `step_up_required`를 반환합니다. 지역 하나만으로 차단하지 않습니다.
+- 누락됐거나 출처가 불명확한 신호는 안전한 정상값으로 채우지 않으며, 추측한 정보로 위험 조합을 생성하지 않습니다. 기기 등록 확인은 이와 별도로 유지됩니다. 클라이언트 헤더나 임의의 위치 입력은 정책 신호로 취급하지 않습니다.
+- 엔진이 제공한 `stepUp.verified === true`와 `authAgeSeconds` 0~300초인 새 요청에서만 가상 복합 위험을 추가 확인 후 허용합니다. 토큰 원문이나 개인키는 다루지 않습니다.
+
+### 자체 확인
+
+```powershell
+npm run decider:test
+npm run fixture:7
+node --test test/step7.test.mjs
+npm run bundle
+```
+
+- 정상 등록 기기는 `allow`, 미등록 기기는 `deny` / `device_not_registered`.
+- 미확인 복합 이상 가상 요청은 `step_up` / `step_up_required`; 엔진이 검증한 새 로그인 시각이 300초 이내인 다시 들어온 가상 요청은 `allow`.
+- 클라이언트 헤더 위조, 불완전한 출처, 지역 단독 접근은 추가 확인 근거로 사용하지 않는지도 시험합니다.
+- `npm run bundle`은 GitHub Actions 실행에서 `artifacts/submission.json`을 생성하고 `step7-submission`으로 보관합니다. 비밀값과 실제 메모는 묶음에 넣지 않습니다.
+
+**실제 운영 검증의 한계:** `stepUp` 검증 정보는 계약상 존재하지만, 실제 엔진의 새 로그인 검증 및 자료 차단·재허용 흐름은 학생 가상 테스트만으로 확인할 수 없습니다. 실제 자료 차단 전후 실측은 **미실행**이며 운영 심판이 검사합니다. 기존 브라우저 로그인이나 Supabase 보안을 새 기기·위치 판정 정책으로 대체하지 않습니다.
