@@ -20,7 +20,7 @@ jobs:
       - run: npm ci
       - run: npm run decider:test
       - run: npm run fixture:7
-      - run: node --test test/step7.test.mjs
+      - run: node --test test/step7.test.mjs test/step8.test.mjs
       - name: Prepare local ignored notes
         run: |
           node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"8단계 메모와 강사 공지의 자원 ID 및 서버 API 권한 분리. 기존 기기 등록과 이상 징후 정책 유지. 실제 강사 권한은 초기 미부여, 실제 로그인 직접 확인은 별도 진행.",blockedAt:null},null,2)+"\n","utf8")'

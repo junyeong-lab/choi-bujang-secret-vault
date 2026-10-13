@@ -53,6 +53,7 @@ export async function decide(request) {
 
   // ALEPH v1에는 대상 메모의 소유자/강사 자격이 들어오지 않습니다.
   // 경로와 작업 종류만 허용 목록과 대조하며, 자원 소유권은 서버 API가 검증합니다.
+  // 확인되지 않은 소유자·강사 역할을 요청 데이터에서 추측하지 않습니다.
   if (decision === 'allow') {
     const path = request?.path;
     const method = request?.method;

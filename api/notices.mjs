@@ -25,7 +25,7 @@ export default async function handler(req, res) {
     if (!validNotice(input)) return res.status(400).json({ error: 'invalid_notice' });
     const id = randomUUID();
     const upstream = await fetch(endpoint, { method: 'POST',
-      headers: dbHeaders(state.secret),
+      headers: { ...dbHeaders(state.secret), 'Content-Type': 'application/json' },
       body: JSON.stringify({ id, title: input.title.trim(), content: input.body, author_id: state.identity.userId }),
       cache: 'no-store' });
     if (!upstream.ok) return res.status(502).json({ error: 'upstream_unavailable' });
