@@ -119,3 +119,19 @@ test('verified identical backup reruns real checks, while preserving no-write st
   assert.equal(answer.body.status,'already_matching');
   assert.equal(answer.body.postRestoreRetest.status,'passed');
 });
+
+test('post-restore Supabase credentials use only apikey for modern server keys',async()=>{
+  const {dbHeaders:collectionHeaders}=await import('../api/memos.mjs');
+  const {dbHeaders:itemHeaders}=await import('../api/memos/[id].mjs');
+  const {dbHeaders:noticeHeaders}=await import('../src/notice-access.mjs');
+  for(const makeHeaders of [collectionHeaders,itemHeaders,noticeHeaders]) {
+    const modern='sb_secret_TEST_ONLY_NOT_REAL';
+    const headers=makeHeaders(modern);
+    assert.equal(headers.apikey,modern);
+    assert.equal(Object.hasOwn(headers,'Authorization'),false);
+    const legacy='eyJ_TEST_ONLY_NOT_REAL';
+    const legacyHeaders=makeHeaders(legacy);
+    assert.equal(legacyHeaders.apikey,legacy);
+    assert.equal(legacyHeaders.Authorization,'Bearer '+legacy);
+  }
+});
