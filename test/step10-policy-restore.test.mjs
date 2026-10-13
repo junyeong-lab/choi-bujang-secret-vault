@@ -7,6 +7,7 @@ import { hashPolicy, planTestRestore, restoreInIsolatedTestFile } from '../scrip
 import { loadVerifiedBackup, SOURCE_COMMIT } from '../scripts/policy-diff.mjs';
 import { decide } from '../src/decider.mjs';
 import { fixtureRequests } from '../scripts/fixture-7.mjs';
+import { detect } from '../src/detect.mjs';
 
 const root = process.cwd();
 const { copy } = loadVerifiedBackup();
@@ -102,6 +103,14 @@ test('real isolated restore then repeat allowed and forbidden checks', async () 
       assert.equal(actual.decision, expected, label);
       console.log('POST_RESTORE_RETEST ' + label + ' ' + actual.decision + ' PASS');
     }
+    const events=Array.from({length:121},(_,i)=>({
+      at:new Date(Date.UTC(2026,9,1)+i*1000).toISOString(),
+      method:'GET',identity:{sub:'synthetic_post_restore'}
+    }));
+    assert.equal(detect(events.slice(0,120)).action,'observe');
+    assert.equal(detect(events).action,'propose_revocation');
+    console.log('POST_RESTORE_RETEST normal_120_reads observe PASS');
+    console.log('POST_RESTORE_RETEST burst_121_reads propose_revocation PASS');
     assert.equal(readFileSync(join(root,'src/decider.mjs'),'utf8'),originalPolicy);
     assert.equal(readFileSync(join(root,'test/fixtures/step10-modified-policy.txt'),'utf8'),auditSentinel);
     assert.throws(()=>restoreInIsolatedTestFile({
