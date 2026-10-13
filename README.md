@@ -530,3 +530,8 @@ node --test test/step10-policy-diff.test.mjs
 - `aleph.config.json`: `step=10`, `restoreRoute=POST /api/restore/memo`. 기존 `judgeIssuer`, 로그인 발급자, 원본 API URL, 기존 허용 경로는 유지합니다.
 - GitHub Actions `Step 10 backup recovery validation and submission`은 각 테스트와 `npm run bundle`을 실행하고 `step10-submission`이라는 결과물을 생성합니다.
 - 공식 심판의 복구 성공 여부는 **미확인**이며, 학생 자체 테스트와 구분합니다.
+
+### 기존 시작 틀 전용 테스트의 한계
+- `npm run test:package`는 초기 생성 API 파일이 `api/ai.js`, `api/threat-intel.js` 두 개뿐이어야 한다고 가정합니다.
+- 이후 단계에서 `api/memos.mjs`, `api/notices.mjs` 등을 실제로 추가했으므로 시작 틀의 불변조건과 현재 앱 구성이 달라졌습니다. **이 시작 틀 전용 검사는 현재 단계 회귀 체크에서 제외**합니다. 최초 실행에서는 해당 조건 불일치로 실패했습니다.
+- `npm run test:r5` 및 6~9단계 실제 정책·탐지 회귀 테스트는 계속 실행합니다. 단, `test:package`가 통과했다고 보고하지 않습니다.

@@ -31,10 +31,8 @@ jobs:
         run: node --test test/step10-policy-diff.test.mjs test/step10-policy-restore.test.mjs
       - name: Validate single-memo restore endpoint and no-leak guard
         run: node --test test/step10-restore-api.test.mjs
-      - name: 1-5 early application package regression
-        run: |
-          npm run test:r5
-          npm run test:package
+      - name: 1-5 current application regression
+        run: npm run test:r5
       - name: 6-8 device, anomaly, resource-zone policy regression
         run: |
           npm run decider:test
