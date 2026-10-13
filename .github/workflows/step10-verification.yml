@@ -33,6 +33,8 @@ jobs:
         run: node --test test/step10-restore-api.test.mjs
       - name: Verify post-restoration retest lifecycle
         run: node --test test/step10-post-restore-retest.test.mjs
+      - name: Verify step-10 public restore discovery and canonical URL
+        run: node --test test/step10-deployment-identity.test.mjs
       - name: 1-5 current application regression
         run: npm run test:r5
       - name: 6-8 device, anomaly, resource-zone policy regression

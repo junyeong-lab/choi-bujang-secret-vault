@@ -7,7 +7,20 @@ export function deploymentIdentity(env, config) {
   const owner = env.VERCEL_GIT_REPO_OWNER;
   const repo = env.VERCEL_GIT_REPO_SLUG;
   const commit = env.VERCEL_GIT_COMMIT_SHA;
-  const host = env.VERCEL_URL;
+  // A production deployment must advertise the public application URL used by
+  // the verified judge JWT audience, not the ephemeral deployment hostname.
+  let host = env.VERCEL_URL;
+  if (config?.step >= 10 && env.VERCEL_ENV === 'production') {
+    let canonical;
+    try { canonical = new URL(config.publicAppUrl); }
+    catch { throw new Error('10단계 공개 배포 주소가 올바르지 않습니다.'); }
+    if (canonical.protocol !== 'https:' || canonical.username || canonical.password ||
+        canonical.port || canonical.pathname !== '/' || canonical.search || canonical.hash ||
+        !HOST.test(canonical.hostname)) {
+      throw new Error('10단계 공개 배포 주소가 올바르지 않습니다.');
+    }
+    host = canonical.hostname;
+  }
   if (env.VERCEL_GIT_PROVIDER !== 'github' || !OWNER.test(owner || '')
       || !REPO.test(repo || '') || repo === '.' || repo === '..'
       || repo.toLowerCase().endsWith('.git') || !SHA.test(commit || '')
@@ -18,7 +31,7 @@ export function deploymentIdentity(env, config) {
       || !/^[A-Z0-9_]{1,80}$/u.test(config.sampleMarker)) {
     throw new Error('배포 식별 정보를 확인할 수 없습니다. Vercel 시스템 환경변수와 단계 설정을 확인하세요.');
   }
-  return {
+  const identity = {
     schema: 'aleph.defense.deployment.v1',
     step: config.step,
     repoUrl: `https://github.com/${owner.toLowerCase()}/${repo.toLowerCase()}`,
@@ -27,4 +40,12 @@ export function deploymentIdentity(env, config) {
     judgeIssuer: config.judgeIssuer,
     sampleMarker: config.sampleMarker,
   };
+  if (config.step >= 3) {
+    identity.identityProvider = config.identityProvider ?? null;
+    identity.allowedRoutes = config.allowedRoutes ?? [];
+  }
+  if (config.step >= 5) identity.originalApiUrl = config.originalApiUrl ?? null;
+  // Publish the restoreRoute to public /aleph.json for the step-10 judge intake.
+  if (config.step >= 10) identity.restoreRoute = config.restoreRoute ?? null;
+  return identity;
 }
