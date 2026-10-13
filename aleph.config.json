@@ -23,5 +23,11 @@
     "POST /api/restore/memo"
   ],
   "originalApiUrl": "https://fijeiiqdyjqmunesjpyk.supabase.co/rest/v1/vault_memos",
-  "restoreRoute": "POST /api/restore/memo"
+  "restoreRoute": "POST /api/restore/memo",
+  "database": {
+    "schema": "aleph.defense.database.v1",
+    "url": "https://fijeiiqdyjqmunesjpyk.supabase.co",
+    "publishableKey": "sb_publishable_iFlkHbEhjHxdGno2O31DEg_STSayiu2",
+    "table": "vault_memos"
+  }
 }
