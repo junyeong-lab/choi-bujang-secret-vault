@@ -178,7 +178,7 @@ export async function restoreJudgeOwnedMemo({
     return {status:502,body:{error:'unexpected_response'}};
   }
   if (!preview.body.wouldChange) {
-    return {status:200,body:{status:'already_matching',memoId}};
+    return {status:200,body:{status:'already_matching',memoId,contentSha256:backupSha256}};
   }
   return runRestoreForVerifiedUser({...args,
     payload:{memoId,snapshotHash:backupSha256,
@@ -245,13 +245,13 @@ export default async function handler(req,res) {
 }
 
 
-// Only a COMMITTED restore can start retests. Preview/error responses pass through untouched.
-// This is part of the restore request lifecycle, never a CI-only or pre-restore claim.
+// Only a committed restore or a verified identical backup may start retests.
+// Preview/error responses pass through untouched. Retests always execute, never fabricated.
 export async function attachPostRestoreRetests({
   restoreResult, authorization, memoId, publicAppUrl,
   retester = runPostRestoreRetests
 }) {
-  if (restoreResult?.status !== 200 || restoreResult.body?.status !== 'restored') {
+  if (restoreResult?.status !== 200 || !['restored','already_matching'].includes(restoreResult.body?.status)) {
     return restoreResult;
   }
   let retests;
