@@ -88,3 +88,18 @@ test('post-restore retest failure is visible; never forged as success',async()=>
   assert.equal(r.body.postRestoreRetest.status,'failed');
   assert.equal(r.body.postRestoreRetest.checks[0].result,'failed');
 });
+
+test('judge restoration without memoId in request still retests restored memo ID', async()=>{
+  const restoring={status:200,body:{status:'restored',memoId,ownerMatched:true,contentSha256:hash}};
+  const seen=[];
+  const r=await attachPostRestoreRetests({
+    restoreResult:restoring,authorization,
+    memoId:restoring.body.memoId,publicAppUrl,
+    retester:async ({memoId:actual})=>{
+      seen.push(actual);
+      return {status:'passed',checks:[{id:'restored_owner_read',result:'passed',observed:'HTTP_200_HASH_MATCH'}]};
+    }
+  });
+  assert.deepEqual(seen,[memoId]);
+  assert.equal(r.body.postRestoreRetest.status,'passed');
+});
