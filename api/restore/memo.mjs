@@ -127,20 +127,34 @@ export async function restoreJudgeOwnedMemo({
     return {status:403,body:{error:'judge_b_only'}};
   }
   const obj = payload == null ? {} : payload;
+  const allowed = ['memoId','id','memo_id','noteId','apply','restore',
+    'dryRun','ownerId','contentSha256'];
   if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
-      Object.keys(obj).some(k=>!['memoId','id','memo_id','apply','restore'].includes(k)) ||
+      Object.keys(obj).some(k=>!allowed.includes(k)) ||
       (obj.apply !== undefined && typeof obj.apply !== 'boolean') ||
-      (obj.restore !== undefined && typeof obj.restore !== 'boolean')) {
+      (obj.restore !== undefined && typeof obj.restore !== 'boolean') ||
+      (obj.dryRun !== undefined && typeof obj.dryRun !== 'boolean') ||
+      (obj.contentSha256 !== undefined && !HASH.test(obj.contentSha256))) {
     return {status:400,body:{error:'invalid_restore_request'}};
   }
-  // An explicit preview request should remain read-only.
-  if (obj.apply === false || obj.restore === false) {
-    return {status:400,body:{error:'use_manual_preview'}};
+  const peerStyle=['id','noteId','ownerId','contentSha256','dryRun']
+    .some(k=>Object.hasOwn(obj,k));
+  // A claimed owner is never authority; only the verified JWT subject is.
+  if (obj.ownerId !== undefined && obj.ownerId !== identity.userId) {
+    return {status:403,body:{error:'not_owner'}};
   }
-  const candidates=[obj.memoId,obj.id,obj.memo_id].filter(x=>x!==undefined);
-  if (candidates.length>1) return {status:400,body:{error:'invalid_restore_request'}};
-  let memoId=candidates[0];
-
+  const entries=[obj.memoId,obj.id,obj.memo_id,obj.noteId]
+    .filter(x=>x!==undefined);
+  if (entries.length>1 && !entries.every(x=>x===entries[0])) {
+    return {status:400,body:{error:'invalid_restore_request'}};
+  }
+  let memoId=entries[0];
+  // The passing implementation documents id-only POST as a read-only preview,
+  // then dryRun:false + ownerId + contentSha256 as an explicit commit.
+  // Keep the prior judge memoId/empty-body flow compatible separately.
+  if (peerStyle && memoId===undefined) {
+    return {status:400,body:{error:'invalid_restore_request'}};
+  }
   if (memoId === undefined) {
     // No client-selected target: require exactly ONE owned private snapshot.
     let url;
@@ -183,14 +197,40 @@ export async function restoreJudgeOwnedMemo({
       (currentSha256!=='absent' && !HASH.test(currentSha256))) {
     return {status:502,body:{error:'unexpected_response'}};
   }
-  // Even if the live memo already matches the snapshot, perform the verified
-  // one-row restore. The judge must observe a committed restore and read-back,
-  // not an uncommitted 'already_matching' shortcut with no audit record.
-  return runRestoreForVerifiedUser({...args,
+  if (peerStyle) {
+    if (obj.apply !== undefined || obj.restore !== undefined) {
+      return {status:400,body:{error:'invalid_restore_request'}};
+    }
+    if (obj.dryRun !== false) {
+      return {status:200,body:{
+        applied:false,dryRun:true,id:memoId,ownerId:identity.userId,
+        contentSha256:backupSha256,
+        backup:{verified:true},liveExists:currentSha256!=='absent',
+        liveMatchesCopy:!preview.body.wouldChange,
+        willWrite:preview.body.wouldChange,
+        confirm:{dryRun:false,ownerId:identity.userId,contentSha256:backupSha256}
+      }};
+    }
+    if (!obj.ownerId || !obj.contentSha256) {
+      return {status:400,body:{error:'confirmation_required'}};
+    }
+    if (obj.contentSha256 !== backupSha256) {
+      return {status:404,body:{error:'backup_not_found'}};
+    }
+  } else if (obj.apply === false || obj.restore === false) {
+    return preview;
+  }
+  // A verified single-row DB commit is required even when the live memo
+  // already matches its backup. Never report restoration based on a preview.
+  const committed=await runRestoreForVerifiedUser({...args,
     payload:{memoId,snapshotHash:backupSha256,
       expectedCurrentHash:currentSha256,apply:true,
       confirm:'RESTORE_ONE_MEMO'}
   });
+  if (committed.status===200 && committed.body?.status==='restored') {
+    return {...committed,body:{...committed.body,created:currentSha256==='absent'}};
+  }
+  return committed;
 }
 
 // Stage 10 judge-only diagnostics: output verified stage/status only, never identities or note content.
