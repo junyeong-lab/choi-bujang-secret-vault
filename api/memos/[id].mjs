@@ -16,7 +16,7 @@ function dbEndpoint(url) {
   if (endpoint.protocol !== 'https:') throw new Error('invalid_protocol');
   return endpoint;
 }
-function dbHeaders(secret, extra = {}) {
+export function dbHeaders(secret, extra = {}) {
   return { apikey: secret, ...(secret.startsWith('eyJ') ? { Authorization: `Bearer ${secret}` } : {}), Accept: 'application/json', ...extra };
 }
 async function authenticate(req, res) {
