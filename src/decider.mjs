@@ -10,6 +10,6 @@ export async function decide(request) {
     requestId: request.requestId,
     decision: registered ? 'allow' : 'deny',
     reasonCode: registered ? 'approved' : 'device_not_registered',
-    ruleIds: ['device_registered'],
+    ruleIds: [RULE_IDS[0]],
   };
 }
