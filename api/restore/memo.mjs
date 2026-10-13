@@ -111,6 +111,82 @@ export async function runRestoreForVerifiedUser({ payload, userId, supabaseOrigi
   }
 }
 
+// For judge B only: authenticated restoreRoute requests can provide a memo ID
+// without knowing private snapshot hashes. Verify the exact owner and backup in
+// a read-only preview, then perform a single optimistic-locked restore.
+export async function restoreJudgeOwnedMemo({
+  identity, payload, supabaseOrigin, secret, transport=fetch
+}) {
+  if (identity?.kind !== 'judge' || identity?.identity !== 'b') {
+    return {status:403,body:{error:'judge_b_only'}};
+  }
+  const obj = payload == null ? {} : payload;
+  if (!obj || typeof obj !== 'object' || Array.isArray(obj) ||
+      Object.keys(obj).some(k=>!['memoId','id','memo_id','apply','restore'].includes(k)) ||
+      (obj.apply !== undefined && typeof obj.apply !== 'boolean') ||
+      (obj.restore !== undefined && typeof obj.restore !== 'boolean')) {
+    return {status:400,body:{error:'invalid_restore_request'}};
+  }
+  // An explicit preview request should remain read-only.
+  if (obj.apply === false || obj.restore === false) {
+    return {status:400,body:{error:'use_manual_preview'}};
+  }
+  const candidates=[obj.memoId,obj.id,obj.memo_id].filter(x=>x!==undefined);
+  if (candidates.length>1) return {status:400,body:{error:'invalid_restore_request'}};
+  let memoId=candidates[0];
+
+  if (memoId === undefined) {
+    // No client-selected target: require exactly ONE owned private snapshot.
+    let url;
+    try {
+      url=new URL('/rest/v1/step10_memo_snapshots',supabaseOrigin);
+      if (url.protocol!=='https:' || !url.hostname.endsWith('.supabase.co')) {
+        throw new Error('invalid_origin');
+      }
+      url.searchParams.set('select','memo_id');
+      url.searchParams.set('owner_id','eq.'+identity.userId);
+      url.searchParams.set('limit','2');
+    } catch { return {status:503,body:{error:'service_unavailable'}}; }
+    let rows;
+    try {
+      const response=await transport(url,{
+        headers:{apikey:secret,Authorization:'Bearer '+secret,
+          Accept:'application/json'},
+        cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)
+      });
+      if (!response.ok) return {status:502,body:{error:'upstream_unavailable'}};
+      rows=await response.json();
+    } catch { return {status:502,body:{error:'upstream_unavailable'}}; }
+    if (!Array.isArray(rows)) return {status:502,body:{error:'unexpected_response'}};
+    if (rows.length!==1) {
+      return {status:rows.length?409:404,
+        body:{error:rows.length?'ambiguous_backup_target':'backup_not_found'}};
+    }
+    memoId=rows[0]?.memo_id;
+  }
+  if (typeof memoId !== 'string' || !MEMO.test(memoId)) {
+    return {status:400,body:{error:'invalid_restore_request'}};
+  }
+  const args={userId:identity.userId,supabaseOrigin,secret,transport};
+  const preview=await runRestoreForVerifiedUser({
+    ...args,payload:{memoId}
+  });
+  if (preview.status!==200 || preview.body?.status!=='preview') return preview;
+  const {backupSha256,currentSha256}=preview.body;
+  if (!HASH.test(backupSha256) ||
+      (currentSha256!=='absent' && !HASH.test(currentSha256))) {
+    return {status:502,body:{error:'unexpected_response'}};
+  }
+  if (!preview.body.wouldChange) {
+    return {status:200,body:{status:'already_matching',memoId}};
+  }
+  return runRestoreForVerifiedUser({...args,
+    payload:{memoId,snapshotHash:backupSha256,
+      expectedCurrentHash:currentSha256,apply:true,
+      confirm:'RESTORE_ONE_MEMO'}
+  });
+}
+
 export default async function handler(req,res) {
   noCache(res);
   if (req.method!=='POST') return res.status(405).json({error:'method_not_allowed'});
@@ -126,9 +202,15 @@ export default async function handler(req,res) {
     try {
       body=typeof req.body==='string'?JSON.parse(req.body):req.body;
     } catch { return res.status(400).json({error:'invalid_json'}); }
-    const result=await runRestoreForVerifiedUser({
-      payload:body,userId:identity.userId,supabaseOrigin:origin,secret
-    });
+    const judgeShortcut=identity.kind==='judge' && identity.identity==='b' &&
+      (body == null || (typeof body==='object' && !Array.isArray(body) &&
+        !Object.hasOwn(body,'snapshotHash') && !Object.hasOwn(body,'expectedCurrentHash')));
+    const result=judgeShortcut
+      ? await restoreJudgeOwnedMemo({identity,payload:body,
+          supabaseOrigin:origin,secret})
+      : await runRestoreForVerifiedUser({
+          payload:body,userId:identity.userId,supabaseOrigin:origin,secret
+        });
     const completed=await attachPostRestoreRetests({
       restoreResult:result,authorization,memoId:body?.memoId,
       publicAppUrl:config.publicAppUrl
