@@ -212,7 +212,7 @@ export default async function handler(req,res) {
           payload:body,userId:identity.userId,supabaseOrigin:origin,secret
         });
     const completed=await attachPostRestoreRetests({
-      restoreResult:result,authorization,memoId:body?.memoId,
+      restoreResult:result,authorization,memoId:result.body?.memoId,
       publicAppUrl:config.publicAppUrl
     });
     return res.status(completed.status).json(completed.body);
