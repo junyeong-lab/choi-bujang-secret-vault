@@ -42,6 +42,10 @@ test('apply succeeds only after hash/owner/ID are confirmed by database',async()
       ownerMatched:true,contentSha256:hash})})});
   assert.equal(r.status,200);
   assert.equal(r.body.contentSha256,hash);
+  assert.equal(r.body.id,memoId);
+  assert.equal(r.body.ownerId,owner);
+  assert.equal(r.body.applied,true);
+  assert.equal(r.body.restored,true);
 });
 test('missing backup, modified memo and invalid saved backup are fail-closed',async()=>{
   for (const [status,code] of [['backup_not_found',404],['owner_mismatch',404],
@@ -136,7 +140,7 @@ test('judge path fails closed: wrong identity, extra fields and multiple targets
   assert.equal((await fail({identity:data,payload:{memoId,owner_id:owner}})).status,400);
   assert.equal((await fail({identity:data,payload:{id:memoId,memoId}})).status,400);
 });
-test('judge preflight refuses absent backup or no actual changes without writing',async()=>{
+test('judge rejects absent backup but commits a verified identical snapshot',async()=>{
   const identity={kind:'judge',identity:'b',userId:owner};
   let writes=0;
   const missing=await restoreJudgeOwnedMemo({...config,identity,payload:{},
@@ -145,13 +149,26 @@ test('judge preflight refuses absent backup or no actual changes without writing
   const same=await restoreJudgeOwnedMemo({...config,identity,payload:{memoId},
     transport:async(_url,init)=>{
       const p=JSON.parse(init.body);
-      if(p.p_apply)writes++;
+      assert.equal(p.p_owner_id,owner);
+      assert.equal(p.p_id,memoId);
+      if(p.p_apply){
+        writes++;
+        assert.equal(p.p_snapshot_hash,hash);
+        assert.equal(p.p_expected_current_hash,hash);
+        return {ok:true,json:async()=>({status:'restored',memoId,
+          ownerMatched:true,contentSha256:hash})};
+      }
       return {ok:true,json:async()=>({status:'preview',memoId,
         ownerMatched:true,backupSha256:hash,currentSha256:hash,wouldChange:false})};
     }
   });
-  assert.equal(same.body.status,'already_matching');
-  assert.equal(writes,0);
+  assert.equal(same.body.status,'restored');
+  assert.equal(same.body.applied,true);
+  assert.equal(same.body.restored,true);
+  assert.equal(same.body.id,memoId);
+  assert.equal(same.body.ownerId,owner);
+  assert.equal(same.body.contentSha256,hash);
+  assert.equal(writes,1);
 });
 
 test('diagnostics distinguish backup, concurrency, and unexecuted retest without sensitive data',()=>{
