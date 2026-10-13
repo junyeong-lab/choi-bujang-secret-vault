@@ -88,8 +88,8 @@ test('real isolated helper dry-run and apply restore exact test file only', () =
     });
     assert.equal(applied.applied,true);
     assert.equal(readFileSync(path,'utf8'),copy);
-    assert.equal(readFileSync(resolve(root,'src/decider.mjs'),'utf8'),originalPolicy);
-    assert.equal(readFileSync(resolve(root,'test/fixtures/step10-modified-policy.txt'),'utf8'),auditSentinel);
+    assert.equal(readFileSync(join(root,'src/decider.mjs'),'utf8'),originalPolicy);
+    assert.equal(readFileSync(join(root,'test/fixtures/step10-modified-policy.txt'),'utf8'),auditSentinel);
     assert.throws(()=>restoreInIsolatedTestFile({
       root,target:id,confirmedVersion:SOURCE_COMMIT,
       expectedCurrentHash:hashPolicy(changed),apply:true
