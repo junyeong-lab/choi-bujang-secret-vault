@@ -3,6 +3,7 @@
 // The handler never accepts a client-provided owner or writes note text to logs/JSON.
 import { readFileSync } from 'node:fs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
+import { runPostRestoreRetests } from '../../src/restore-retest.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../../aleph.config.json', import.meta.url), 'utf8'));
 const MEMO = /^[A-Za-z0-9_-]{1,128}$/;
@@ -128,8 +129,46 @@ export default async function handler(req,res) {
     const result=await runRestoreForVerifiedUser({
       payload:body,userId:identity.userId,supabaseOrigin:origin,secret
     });
-    return res.status(result.status).json(result.body);
+    const completed=await attachPostRestoreRetests({
+      restoreResult:result,authorization,memoId:body?.memoId,
+      publicAppUrl:config.publicAppUrl
+    });
+    return res.status(completed.status).json(completed.body);
   } catch {
     return res.status(502).json({error:'upstream_unavailable'});
   }
+}
+
+
+// Only a COMMITTED restore can start retests. Preview/error responses pass through untouched.
+// This is part of the restore request lifecycle, never a CI-only or pre-restore claim.
+export async function attachPostRestoreRetests({
+  restoreResult, authorization, memoId, publicAppUrl,
+  retester = runPostRestoreRetests
+}) {
+  if (restoreResult?.status !== 200 || restoreResult.body?.status !== 'restored') {
+    return restoreResult;
+  }
+  let retests;
+  try {
+    retests = await retester({
+      authorization, memoId, expectedContentHash:restoreResult.body.contentSha256,
+      publicAppUrl
+    });
+    if (!retests || !['passed','failed'].includes(retests.status) ||
+        !Array.isArray(retests.checks) || retests.checks.length === 0 ||
+        retests.checks.some(check => !['passed','failed'].includes(check.result))) {
+      throw new Error('invalid_retest_result');
+    }
+  } catch {
+    retests = {
+      status:'failed',
+      checks:[{id:'retest_execution',result:'failed',observed:'request_failed'}],
+      executedAt:new Date().toISOString()
+    };
+  }
+  return {
+    status:restoreResult.status,
+    body:{...restoreResult.body,postRestoreRetest:retests}
+  };
 }
