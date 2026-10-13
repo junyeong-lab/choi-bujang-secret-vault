@@ -18,6 +18,7 @@ const config = {
   identityProvider:{issuer:'https://example.supabase.co/auth/v1',audience:'authenticated',jwksUrl:'https://example.supabase.co/auth/v1/.well-known/jwks.json'},
   allowedRoutes:['GET /api/memos', 'POST /api/restore/memo'],
   originalApiUrl:'https://example.supabase.co/rest/v1/vault_memos',
+  database:{schema:'aleph.defense.database.v1',url:'https://example.supabase.co',publishableKey:'sb_publishable_example',table:'vault_memos'},
   restoreRoute:'POST /api/restore/memo',
 };
 
@@ -28,6 +29,7 @@ test('step10 publishes the registered restore route and the canonical production
   assert.deepEqual(result.identityProvider,config.identityProvider);
   assert.deepEqual(result.allowedRoutes,config.allowedRoutes);
   assert.equal(result.originalApiUrl,config.originalApiUrl);
+  assert.deepEqual(result.database,config.database);
   assert.equal(result.repoUrl,'https://github.com/junyeong-lab/choi-bujang-secret-vault');
 });
 
@@ -40,6 +42,7 @@ test('earlier steps preserve the original deployment identity contract',()=>{
   const old=deploymentIdentity({...env,VERCEL_ENV:'production'},{...config,step:2});
   assert.equal(old.restoreRoute,undefined);
   assert.equal(old.identityProvider,undefined);
+  assert.equal(old.database,undefined);
   assert.equal(old.publicAppUrl,'https://choi-bujang-secret-vault-build-123.vercel.app');
 });
 
