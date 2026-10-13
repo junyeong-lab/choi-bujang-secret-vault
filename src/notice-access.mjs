@@ -3,7 +3,7 @@ import { createLoginVerifier } from './verify-login.mjs';
 
 const config = JSON.parse(readFileSync(new URL('../aleph.config.json', import.meta.url), 'utf8'));
 let cachedVerifier;
-const headers = secret => ({ apikey: secret, Authorization: 'Bearer ' + secret, Accept: 'application/json' });
+const headers = secret => ({ apikey: secret, ...(secret.startsWith('eyJ') ? { Authorization: 'Bearer ' + secret } : {}), Accept: 'application/json' });
 export const dbHeaders = headers;
 export const safeResponseHeaders = res => {
   res.setHeader('Cache-Control', 'no-store');
