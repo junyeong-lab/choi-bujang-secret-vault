@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo,judgeRestoreDiagnostic } from '../api/restore/memo.mjs';
+import { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo,judgeRestoreDiagnostic,sessionAuth } from '../api/restore/memo.mjs';
 const memoId='sample-note-5';
 const hash='a'.repeat(64),other='b'.repeat(64);
 const owner='00000000-0000-4000-8000-000000000001';
@@ -166,4 +166,18 @@ test('diagnostics distinguish backup, concurrency, and unexecuted retest without
   assert.equal(absent.stage,'post_restore_retest_not_executed');
   assert.equal(absent.retestExecuted,false);
   assert.equal(JSON.stringify([lookup,changed,failed,absent]).includes('owner_id'),false);
+});
+
+test('explicit judge Authorization takes priority over an unrelated session cookie',()=>{
+  const req={headers:{authorization:'Bearer VERIFIED_JUDGE_HEADER',
+    cookie:'vault_session=UNRELATED_BROWSER_COOKIE'}};
+  assert.deepEqual(sessionAuth(req),{
+    authorization:'Bearer VERIFIED_JUDGE_HEADER',fromCookie:false
+  });
+  assert.deepEqual(sessionAuth({headers:{cookie:'vault_session=COOKIE_ONLY'}}),{
+    authorization:'Bearer COOKIE_ONLY',fromCookie:true
+  });
+  assert.deepEqual(sessionAuth({headers:{}}),{
+    authorization:undefined,fromCookie:false
+  });
 });
