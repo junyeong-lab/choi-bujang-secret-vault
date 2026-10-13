@@ -38,7 +38,7 @@ test('retest executes actual four HTTP probes and real policy functions only aft
   assert.equal(JSON.stringify(r).includes(authorization),false);
 });
 test('unexpected failed owner, zone and notice responses are reported as failed, never passed',async()=>{
-  const {transport}=fakeTransport({'/api/memos/'+memoId:404,
+  const {transport}=fakeTransport({['/api/memos/'+memoId]:404,
     '/api/memos/sample-note-1':200,'/api/notices':200});
   const r=await runPostRestoreRetests({...testContext,transport});
   assert.equal(r.status,'failed');
