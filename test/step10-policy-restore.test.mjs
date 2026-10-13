@@ -69,7 +69,7 @@ test('post-restore normal A allows and other-zone B denies in preserved decider'
   assert.equal((await decide(suspicious)).decision,'step_up');
 });
 
-test('real isolated helper dry-run and apply restore exact test file only', () => {
+test('real isolated restore then repeat allowed and forbidden checks', async () => {
   const id = 'test/fixtures/step10-isolated-' + process.pid + '-' + Math.floor(Math.random()*1000000) + '.mjs';
   const path = join(root, id);
   const originalPolicy = readFileSync(join(root,'src/decider.mjs'), 'utf8');
@@ -88,6 +88,20 @@ test('real isolated helper dry-run and apply restore exact test file only', () =
     });
     assert.equal(applied.applied,true);
     assert.equal(readFileSync(path,'utf8'),copy);
+    // Only after the test policy was actually restored, execute the existing decisions.
+    const { normal, suspicious } = fixtureRequests();
+    const retests = [
+      [normal, 'allow', 'normal_registered'],
+      [{...normal, deviceRegistered:false}, 'deny', 'unregistered_denied'],
+      [{...normal, method:'GET',path:'/api/memos',route:'GET /api/memos'}, 'deny', 'other_zone_denied'],
+      [{...normal, method:'POST',path:'/api/notices',route:'POST /api/notices'}, 'deny', 'instructor_write_denied'],
+      [suspicious, 'step_up', 'risk_step_up'],
+    ];
+    for (const [input, expected, label] of retests) {
+      const actual = await decide(input);
+      assert.equal(actual.decision, expected, label);
+      console.log('POST_RESTORE_RETEST ' + label + ' ' + actual.decision + ' PASS');
+    }
     assert.equal(readFileSync(join(root,'src/decider.mjs'),'utf8'),originalPolicy);
     assert.equal(readFileSync(join(root,'test/fixtures/step10-modified-policy.txt'),'utf8'),auditSentinel);
     assert.throws(()=>restoreInIsolatedTestFile({
