@@ -400,3 +400,23 @@ npm run bundle
 - `npm run bundle`은 GitHub Actions 실행에서 `artifacts/submission.json`을 생성하고 `step7-submission`으로 보관합니다. 비밀값과 실제 메모는 묶음에 넣지 않습니다.
 
 **실제 운영 검증의 한계:** `stepUp` 검증 정보는 계약상 존재하지만, 실제 엔진의 새 로그인 검증 및 자료 차단·재허용 흐름은 학생 가상 테스트만으로 확인할 수 없습니다. 실제 자료 차단 전후 실측은 **미실행**이며 운영 심판이 검사합니다. 기존 브라우저 로그인이나 Supabase 보안을 새 기기·위치 판정 정책으로 대체하지 않습니다.
+
+## 8단계 — 자료마다 갈 수 있는 구역을 나눕니다
+
+- 메모는 `memo:<id>`, 강사 공지는 `notice:<uuid>`로 별도 자원 ID를 반환합니다. 기존 `/api/memos` 경로 및 데이터는 유지합니다.
+- 강사 공지는 `/api/notices` 및 `/api/notices/:id`에서 관리하며, 화면 메뉴는 변경하지 않습니다.
+- Supabase `instructor_notices`와 `instructor_grants`는 별도 테이블로 추가했습니다. 기존 메모 5건을 변경하지 않았으며, 최초 강사 권한은 0명입니다. RLS는 활성화됐고 익명 및 일반 로그인 DB 역할의 직접 접근 권한은 주지 않았습니다.
+- 서버 API는 로그인 검증 후 강사 수정·생성·삭제 요청마다 `instructor_grants`의 활성 권한을 DB에서 확인합니다. 클라이언트 `role` 값은 이용하지 않습니다. 메모 API는 DB의 `owner_id`와 검증된 사용자 ID를 대조합니다.
+- ALEPH 판정기에서는 `method`, `path`, `route`, `deviceRegistered`와 기존 이상행동 신호를 검사합니다. 미등록 기기 거부 및 복합 위험 `step_up` 정책을 유지합니다. 미확인 경로는 거부합니다.
+- ALEPH 18필드 판정 계약에는 메모의 저장된 소유자나 강사 권한이 제공되지 않습니다. 판정기에서 임의 역할을 만들지 않으며 실제 사용자별 권한 검사는 자료 API에서 합니다. 공식 심판의 사용자 소유권 경로 테스트는 별도 확인이 필요합니다.
+
+### 확인 명령
+```powershell
+npm run decider:test
+npm run fixture:7
+node --test test/step7.test.mjs
+npm run bundle
+```
+
+- API 보안 직접 검증: 비로그인 `/api/memos`와 `/api/notices`는 거부, 사용자 본인 메모는 허용, 다른 사용자 메모는 거부, 일반 학생의 공지 작성·수정은 `instructor_only`로 거부.
+- 신규 강사 공지 쓰기 권한은 임의로 부여하지 않습니다. 최초에는 모든 사용자의 공지 변경이 거부됩니다. 강사 권한 배정은 사용자의 별도 승인과 검증이 필요합니다.

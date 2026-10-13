@@ -51,9 +51,9 @@ function validMemoInput(input) {
   return input && typeof input.title === 'string' && input.title.trim().length > 0
     && input.title.length <= 160 && typeof input.body === 'string' && input.body.length <= 10000;
 }
-function present(row) { return { id: row.id, title: row.title, body: row.content }; }
+function present(row) { return { id: row.id, title: row.title, body: row.content, resourceId: 'memo:' + row.id }; }
 
-// Dynamic Vercel route /api/memos/:id. 3단계에서는 모든 로그인 사용자가 조회/수정/삭제할 수 있습니다.
+// 메모 ID와 검증된 로그인 사용자 소유권을 모두 확인합니다.
 export default async function handler(req, res) {
   respondHeaders(res);
   if (!['GET','PUT','DELETE'].includes(req.method)) {

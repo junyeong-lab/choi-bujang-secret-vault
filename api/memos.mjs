@@ -52,7 +52,7 @@ function validMemoInput(input) {
   return input && typeof input.title === 'string' && input.title.trim().length > 0
     && input.title.length <= 160 && typeof input.body === 'string' && input.body.length <= 10000;
 }
-function present(row) { return { id: row.id, title: row.title, body: row.content }; }
+function present(row) { return { id: row.id, title: row.title, body: row.content, resourceId: 'memo:' + row.id }; }
 
 export default async function handler(req, res) {
   respondHeaders(res);
@@ -86,7 +86,7 @@ if (req.method === 'POST' && !req.headers.authorization) {
       endpoint.searchParams.set('select', 'id,title,content');
       endpoint.searchParams.set('order', 'created_at.asc');
       endpoint.searchParams.set('owner_id', `eq.${identity.userId}`);
-      // 3단계: 로그인만 검사합니다. 소유권 필터는 4단계에 도입합니다.
+      // 소유자 기준 조회. role이나 쿼리 소유자 값은 사용하지 않습니다.
       const upstream = await fetch(endpoint, { headers: dbHeaders(secret), cache: 'no-store', signal: AbortSignal.timeout(8000) });
       if (!upstream.ok) return res.status(502).json({ error: 'upstream_unavailable' });
       const rows = await upstream.json();
