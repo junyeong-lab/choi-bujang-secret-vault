@@ -427,3 +427,13 @@ npm run bundle
 - 브라우저 쿠키가 있으면 이를 사용하며, 쿠키가 없는 심판/외부 요청은 기존 Bearer 검증을 그대로 적용합니다.
 - 정상 쿠키, 추가 인증 헤더, Bearer만 있는 요청, 비로그인 요청을 가짜 값으로 시험합니다.
 - 실제 로그인된 브라우저에서 `/api/notices`가 HTTP 200과 빈 공지 배열을 반환하는지는 재확인해야 합니다.
+
+### 8단계 공식 심판 피드백 반영 — S08_OTHER_ZONE_ALLOWED
+
+- 최초 제출 커밋 `9684720`: 공식 심판 48/100, 구역 규칙 위반 S08_OTHER_ZONE_ALLOWED.
+- 원인: 판정기가 메모 전체 목록과 강사 공지 쓰기를 `allow`로 반환한 과도한 허용.
+- 수정: `GET /api/memos`, `POST /api/memos`와 반 공지의 `POST/PUT/PATCH/DELETE`를 판정기에서 `deny / resource_not_allowed`로 처리합니다. export·all 같은 목록/기능형 ID도 판정기에서 거부합니다.
+- 정확한 단건 메모 조회·수정은 판정기에서 허용하되, 대상 소유권은 기존 API에서 검증합니다.
+- 6단계 기기 등록 및 7단계 복합 이상 접근 `step_up`는 유지하고, 권한 없는 구역은 다시 로그인하더라도 접근을 허용하지 않습니다.
+- 이 수정은 ALEPH 판정기 정책만 변경하며, 기존 브라우저의 본인 소유 메모 목록 API나 Supabase 데이터는 그대로 유지합니다.
+- `node --test test/step7.test.mjs test/step8.test.mjs`, `npm run decider:test`, `npm run fixture:7`, `npm run bundle`로 검증합니다. 공식 심판 재채점은 별도입니다.

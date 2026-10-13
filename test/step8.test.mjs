@@ -45,3 +45,55 @@ test('engine bearer without cookie is preserved', () => {
 test('requests without cookie or bearer remain unauthenticated', () => {
   assert.equal(noticeAuthorization({ headers: {} }), undefined);
 });
+
+const zone = (method, path, route, overrides = {}) => ({ ...input(method, path, route), ...overrides });
+const expectZone = async (method, path, route, decision, code) => {
+  const result = await decide(zone(method, path, route));
+  assert.equal(result.decision, decision, method + ' ' + path);
+  assert.equal(result.reasonCode, code, method + ' ' + path);
+  assert.deepEqual(Object.keys(result).sort(), ['decision', 'reasonCode', 'requestId', 'ruleIds', 'schema']);
+  return result;
+};
+
+test('S08_OTHER_ZONE_ALLOWED: memo list GET is denied by decider', async () => {
+  const result = await expectZone('GET', '/api/memos', 'GET /api/memos', 'deny', 'resource_not_allowed');
+  assert.deepEqual(result.ruleIds, ['resource_zone']);
+});
+test('S08_OTHER_ZONE_ALLOWED: memo list POST is denied by decider', async () => {
+  await expectZone('POST', '/api/memos', 'POST /api/memos', 'deny', 'resource_not_allowed');
+});
+test('S08_OTHER_ZONE_ALLOWED: instructor notice POST is denied', async () => {
+  await expectZone('POST', '/api/notices', 'POST /api/notices', 'deny', 'resource_not_allowed');
+});
+test('S08_OTHER_ZONE_ALLOWED: instructor notice PUT, DELETE and PATCH are denied', async () => {
+  const id = '00000000-0000-4000-8000-000000000000';
+  for (const verb of ['PUT', 'DELETE', 'PATCH']) {
+    await expectZone(verb, '/api/notices/' + id, verb + ' /api/notices/:id', 'deny', 'resource_not_allowed');
+  }
+});
+test('S08_OTHER_ZONE_ALLOWED: other instructor data writing denied', async () => {
+  await expectZone('PUT', '/api/instructor/announcements/notice1', 'PUT /api/instructor/announcements/:id', 'deny', 'resource_not_allowed');
+});
+test('S08_OTHER_ZONE_ALLOWED: exported/bulk memo pseudo-detail paths denied', async () => {
+  for (const id of ['export','all','list','search','bulk','batch','admin','download']) {
+    await expectZone('GET','/api/memos/' + id,'GET /api/memos/:id','deny','resource_not_allowed');
+  }
+});
+test('S08_OTHER_ZONE_ALLOWED: another memo listing route denied', async () => {
+  await expectZone('GET', '/notes', 'GET /notes', 'deny', 'resource_not_allowed');
+});
+test('S08_OTHER_ZONE_ALLOWED: forbidden zone still denied after step-up', async () => {
+  const { suspicious } = fixtureRequests();
+  const result = await decide({ ...suspicious,
+    method:'PUT', path:'/api/notices/00000000-0000-4000-8000-000000000000',
+    route:'PUT /api/notices/:id', stepUp:{verified:true,authAgeSeconds:60}});
+  assert.equal(result.decision,'deny');
+  assert.equal(result.reasonCode,'resource_not_allowed');
+});
+test('S08_OTHER_ZONE_ALLOWED: a single existing memo may be read and updated', async () => {
+  await expectZone('GET','/api/memos/sample-note-1','GET /api/memos/:id','allow','approved');
+  await expectZone('PUT','/api/memos/sample-note-1','PUT /api/memos/:id','allow','approved');
+});
+test('S08_OTHER_ZONE_ALLOWED: public notice reading remains permissible', async () => {
+  await expectZone('GET','/api/notices','GET /api/notices','allow','approved');
+});

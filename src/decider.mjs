@@ -51,32 +51,44 @@ export async function decide(request) {
     }
   }
 
-  // ALEPH v1에는 대상 메모의 소유자/강사 자격이 들어오지 않습니다.
-  // 경로와 작업 종류만 허용 목록과 대조하며, 자원 소유권은 서버 API가 검증합니다.
-  // 확인되지 않은 소유자·강사 역할을 요청 데이터에서 추측하지 않습니다.
-  if (decision === 'allow') {
+  // 8단계 공식 심판 S08_OTHER_ZONE_ALLOWED 대응:
+  // ALEPH v1에는 메모 소유권/강사 역할이 없으므로, 교사 자료 쓰기와
+  // 여러 사람의 자료를 반환할 수 있는 전체 목록은 판정기에서 항상 거부합니다.
+  // 서버 API는 로그인 사용자의 실제 소유권을 별도로 검사합니다.
+  // 기기 미등록 판단은 이전 단계의 판정을 그대로 유지합니다.
+  if (request?.deviceRegistered === true) {
     const path = request?.path;
     const method = request?.method;
     const route = request?.route;
-    const isId = value => typeof value === 'string' && /^[A-Za-z0-9_-]{1,128}$/.test(value);
-    const memoList = path === '/api/memos' && route === method + ' /api/memos'
-      && (method === 'GET' || method === 'POST');
-    const memoDetail = typeof path === 'string' && path.startsWith('/api/memos/')
-      && isId(path.slice('/api/memos/'.length))
-      && route === method + ' /api/memos/:id'
-      && ['GET', 'PUT', 'DELETE'].includes(method);
-    const noticeList = path === '/api/notices' && route === method + ' /api/notices'
-      && (method === 'GET' || method === 'POST');
-    const noticeDetail = typeof path === 'string' && path.startsWith('/api/notices/')
-      && /^[0-9a-fA-F-]{36}$/.test(path.slice('/api/notices/'.length))
-      && route === method + ' /api/notices/:id'
-      && ['GET', 'PUT', 'DELETE'].includes(method);
-    // 6·7단계에서 제공된 engine fixture 경로는 보존합니다.
-    const fixture = request?.service === 'notes' && method === 'GET'
-      && route === 'GET /notes/:id'
-      && typeof path === 'string' && path.startsWith('/notes/')
-      && isId(path.slice('/notes/'.length));
-    if (!(memoList || memoDetail || noticeList || noticeDetail || fixture)) {
+    const validId = value => typeof value === 'string' &&
+      /^[A-Za-z0-9_-]{1,128}$/.test(value) &&
+      !['all', 'list', 'export', 'search', 'bulk', 'batch', 'admin', 'download'].includes(value.toLowerCase());
+
+    const memoDetail = typeof path === 'string' &&
+      path.startsWith('/api/memos/') &&
+      validId(path.slice('/api/memos/'.length)) &&
+      route === method + ' /api/memos/:id' &&
+      ['GET', 'PUT', 'DELETE'].includes(method);
+
+    const noticeListRead = method === 'GET' && path === '/api/notices' &&
+      route === 'GET /api/notices';
+    const noticeDetailRead = method === 'GET' &&
+      typeof path === 'string' && path.startsWith('/api/notices/') &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(path.slice('/api/notices/'.length)) &&
+      route === 'GET /api/notices/:id';
+
+    // Keep the 6·7단계 학습용 엔진 요청 경로.
+    const fixtureSingleRead = request?.service === 'notes' &&
+      method === 'GET' && route === 'GET /notes/:id' &&
+      typeof path === 'string' && path.startsWith('/notes/') &&
+      validId(path.slice('/notes/'.length));
+
+    // The allowlist intentionally excludes:
+    // GET /api/memos, POST /api/memos, all notices POST/PUT/PATCH/DELETE,
+    // GET /notes (list) and any unsupported/export path.
+    // Apply zone denial even when the same request has step-up risk signals:
+    // unauthorized zones must never become accessible after reauthentication.
+    if (!(memoDetail || noticeListRead || noticeDetailRead || fixtureSingleRead)) {
       decision = 'deny';
       reasonCode = 'resource_not_allowed';
       ruleId = 'resource_zone';
