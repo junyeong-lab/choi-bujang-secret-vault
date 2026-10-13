@@ -1,6 +1,8 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
-import { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo,judgeRestoreDiagnostic,sessionAuth } from '../api/restore/memo.mjs';
+import handler, { validateRestorePayload,runRestoreForVerifiedUser,restoreJudgeOwnedMemo,judgeRestoreDiagnostic,sessionAuth,restoreLogRecord } from '../api/restore/memo.mjs';
+import { createHash } from 'node:crypto';
+import { generateKeyPair,exportJWK,SignJWT } from 'jose';
 const memoId='sample-note-5';
 const hash='a'.repeat(64),other='b'.repeat(64);
 const owner='00000000-0000-4000-8000-000000000001';
@@ -180,4 +182,121 @@ test('explicit judge Authorization takes priority over an unrelated session cook
   assert.deepEqual(sessionAuth({headers:{}}),{
     authorization:undefined,fromCookie:false
   });
+});
+
+test('restore log projection includes only categorical diagnostics, never private data',()=>{
+  const privateValue='PRIVATE_TEST_SENTINEL';
+  const record=restoreLogRecord({status:404,body:{error:'backup_not_found',
+    memoId:privateValue,owner_id:privateValue,body:privateValue,
+    authorization:privateValue,postRestoreRetest:{status:privateValue}}},privateValue);
+  assert.deepEqual(record,{event:'step10_restore',httpStatus:404,
+    stage:'backup_lookup',retestStatus:'not_run'});
+  assert.equal(JSON.stringify(record).includes(privateValue),false);
+});
+
+test('full handler logs rejection stages and signed judge restore/retest without changing responses',async(t)=>{
+  const oldSecret=process.env.SUPABASE_SECRET_KEY;
+  const oldOrigin=process.env.SUPABASE_URL;
+  t.after(()=>{
+    if(oldSecret===undefined) delete process.env.SUPABASE_SECRET_KEY;
+    else process.env.SUPABASE_SECRET_KEY=oldSecret;
+    if(oldOrigin===undefined) delete process.env.SUPABASE_URL;
+    else process.env.SUPABASE_URL=oldOrigin;
+  });
+  const records=[];
+  t.mock.method(console,'info',value=>records.push(JSON.parse(value)));
+  const {privateKey,publicKey}=await generateKeyPair('ES256');
+  const jwk={...await exportJWK(publicKey),kid:'isolated-test',alg:'ES256',use:'sig'};
+  const token=await new SignJWT({aleph_role:'judge',aleph_identity:'b',
+    aleph_run:'00000000-0000-4000-8000-000000000002'})
+    .setProtectedHeader({alg:'ES256',kid:'isolated-test'})
+    .setIssuer('https://aleph-judge-production.up.railway.app/defense/judge')
+    .setAudience('choi-bujang-secret-vault-pi.vercel.app')
+    .setSubject(owner).setIssuedAt().setExpirationTime('10m').sign(privateKey);
+  const content='ISOLATED_RESTORE_TEST_CONTENT';
+  const restoredHash=createHash('sha256').update(content).digest('hex');
+  let backupExists=false,committed=false;
+  const calls=[];
+  t.mock.method(globalThis,'fetch',async(input,init={})=>{
+    const url=new URL(input);
+    calls.push(url.pathname);
+    const json=(body,status=200)=>new Response(JSON.stringify(body),{status,
+      headers:{'Content-Type':'application/json'}});
+    if(url.href==='https://aleph-judge-production.up.railway.app/defense/judge/.well-known/jwks.json') {
+      return json({keys:[jwk]});
+    }
+    if(url.origin===config.supabaseOrigin) {
+      if(url.pathname==='/rest/v1/step10_memo_snapshots') {
+        assert.equal(url.searchParams.get('owner_id'),'eq.'+owner);
+        return json(backupExists?[{memo_id:memoId}]:[]);
+      }
+      if(url.pathname==='/rest/v1/rpc/step10_restore_one_memo') {
+        const p=JSON.parse(init.body);
+        assert.equal(p.p_owner_id,owner);
+        assert.equal(p.p_id,memoId);
+        if(!p.p_apply) return json({status:'preview',memoId,ownerMatched:true,
+          backupSha256:restoredHash,currentSha256:other,wouldChange:true});
+        assert.equal(p.p_snapshot_hash,restoredHash);
+        assert.equal(p.p_expected_current_hash,other);
+        committed=true;
+        return json({status:'restored',memoId,ownerMatched:true,contentSha256:restoredHash});
+      }
+    }
+    if(url.origin==='https://choi-bujang-secret-vault-pi.vercel.app') {
+      assert.equal(committed,true,'HTTP retests must follow the simulated DB commit');
+      if(url.pathname==='/api/memos/'+memoId) return json({id:memoId,body:content});
+      if(url.pathname==='/api/memos/sample-note-1') return json({error:'not_found'},404);
+      if(url.pathname==='/api/memos') return json({error:'unauthorized'},401);
+      if(url.pathname==='/api/notices') return json({error:'instructor_only'},403);
+    }
+    throw Error('unexpected_test_transport');
+  });
+  async function invoke(req){
+    const response={setHeader(){},status(code){this.code=code;return this;},
+      json(body){this.body=body;return this;}};
+    const before=records.length;
+    await handler({headers:{},...req},response);
+    assert.equal(records.length,before+1);
+    assert.equal(records.at(-1).httpStatus,response.code);
+    return response;
+  }
+  assert.equal((await invoke({method:'GET'})).code,405);
+  assert.equal(records.at(-1).stage,'method');
+  delete process.env.SUPABASE_SECRET_KEY;
+  assert.equal((await invoke({method:'POST'})).code,503);
+  assert.equal(records.at(-1).stage,'configuration');
+  process.env.SUPABASE_SECRET_KEY=config.secret;
+  process.env.SUPABASE_URL=config.supabaseOrigin;
+  assert.equal((await invoke({method:'POST',headers:{cookie:'vault_session=TEST'}})).code,403);
+  assert.equal(records.at(-1).stage,'origin_check');
+  assert.equal((await invoke({method:'POST',body:{}})).code,401);
+  assert.equal(records.at(-1).stage,'authentication');
+  assert.equal(calls.length,0,'rejected requests must not reach external services');
+  const headers={authorization:'Bearer '+token};
+  assert.equal((await invoke({method:'POST',headers,body:'{'})).code,400);
+  assert.equal(records.at(-1).stage,'request_body');
+  const missing=await invoke({method:'POST',headers,body:{}});
+  assert.equal(missing.code,404);
+  assert.equal(missing.body.error,'backup_not_found');
+  assert.equal(missing.body.restoreDiagnostic.retestExecuted,false);
+  assert.equal(records.at(-1).stage,'backup_lookup');
+  assert.equal(committed,false);
+  backupExists=true;
+  const restored=await invoke({method:'POST',headers,body:{}});
+  assert.equal(restored.code,200);
+  assert.equal(restored.body.status,'restored');
+  assert.equal(restored.body.postRestoreRetest.status,'passed');
+  assert.equal(restored.body.postRestoreRetest.checks.length,10);
+  assert.equal(records.at(-1).stage,'post_restore_retest');
+  assert.equal(records.at(-1).retestStatus,'passed');
+  const logs=JSON.stringify(records);
+  for(const value of [token,owner,content,memoId,config.secret]) {
+    assert.equal(logs.includes(value),false);
+  }
+  t.mock.method(console,'info',()=>{throw Error('logger_unavailable');});
+  const unchanged={setHeader(){},status(code){this.code=code;return this;},
+    json(body){this.body=body;}};
+  await handler({method:'GET',headers:{}},unchanged);
+  assert.equal(unchanged.code,405);
+  assert.deepEqual(unchanged.body,{error:'method_not_allowed'});
 });

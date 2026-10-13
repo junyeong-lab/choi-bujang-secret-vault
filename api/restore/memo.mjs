@@ -208,42 +208,75 @@ export function judgeRestoreDiagnostic(result) {
     retestStatus:retest?.status ?? 'not_run'};
 }
 
+// Server-only diagnostic projection. Never serialize request data or raw errors.
+export function restoreLogRecord(result, phase='restore_request') {
+  const phases=['method','configuration','origin_check','authentication',
+    'request_body','restore_request','post_restore_retest'];
+  const stages={method_not_allowed:'method',service_unavailable:'configuration',
+    invalid_origin:'origin_check',unauthorized:'authentication',
+    invalid_json:'request_body',invalid_restore_request:'request_body',
+    use_manual_preview:'request_body',judge_b_only:'authorization',
+    backup_not_found:'backup_lookup',ambiguous_backup_target:'backup_lookup',
+    backup_invalid:'backup_integrity',current_changed:'concurrent_change',
+    unexpected_response:'upstream_response'};
+  const body=result?.body;
+  const retest=body?.postRestoreRetest;
+  let stage=phases.includes(phase)?phase:'restore_request';
+  if (Object.hasOwn(stages,body?.error ?? '')) stage=stages[body.error];
+  else if (body?.status==='preview') stage='preview_only';
+  else if (['restored','already_matching'].includes(body?.status)) {
+    stage=retest?'post_restore_retest':'post_restore_retest_not_executed';
+  }
+  return {event:'step10_restore',
+    httpStatus:Number.isInteger(result?.status)?result.status:500,stage,
+    retestStatus:['passed','failed'].includes(retest?.status)?retest.status:'not_run'};
+}
+
 export default async function handler(req,res) {
+  const reply=(status,body,phase)=>{
+    try { console.info(JSON.stringify(restoreLogRecord({status,body},phase))); }
+    catch { /* Logging must not change authorization or the response. */ }
+    return res.status(status).json(body);
+  };
   noCache(res);
-  if (req.method!=='POST') return res.status(405).json({error:'method_not_allowed'});
+  if (req.method!=='POST') return reply(405,{error:'method_not_allowed'});
   const secret=process.env.SUPABASE_SECRET_KEY, origin=process.env.SUPABASE_URL;
-  if (!secret || !origin) return res.status(503).json({error:'service_unavailable'});
+  if (!secret || !origin) return reply(503,{error:'service_unavailable'});
   const {authorization,fromCookie}=sessionAuth(req);
-  if (fromCookie && !sameOrigin(req)) return res.status(403).json({error:'invalid_origin'});
+  if (fromCookie && !sameOrigin(req)) return reply(403,{error:'invalid_origin'});
+  let phase='authentication';
   try {
     cachedVerifier ??= createLoginVerifier({config,supabaseSecretKey:secret});
     const identity=await cachedVerifier(authorization);
-    if (!identity) return res.status(401).json({error:'unauthorized'});
+    if (!identity) return reply(401,{error:'unauthorized'});
+    phase='request_body';
     let body;
     try {
       body=typeof req.body==='string'?JSON.parse(req.body):req.body;
-    } catch { return res.status(400).json({error:'invalid_json'}); }
+    } catch { return reply(400,{error:'invalid_json'}); }
     const judgeShortcut=identity.kind==='judge' && identity.identity==='b' &&
       (body == null || (typeof body==='object' && !Array.isArray(body) &&
         !Object.hasOwn(body,'snapshotHash') && !Object.hasOwn(body,'expectedCurrentHash')));
+    phase='restore_request';
     const result=judgeShortcut
       ? await restoreJudgeOwnedMemo({identity,payload:body,
           supabaseOrigin:origin,secret})
       : await runRestoreForVerifiedUser({
           payload:body,userId:identity.userId,supabaseOrigin:origin,secret
         });
+    phase='post_restore_retest';
     const completed=await attachPostRestoreRetests({
       restoreResult:result,authorization,memoId:result.body?.memoId,
       publicAppUrl:config.publicAppUrl
     });
     if (identity.kind==='judge') {
-      return res.status(completed.status).json({
+      return reply(completed.status,{
         ...completed.body,restoreDiagnostic:judgeRestoreDiagnostic(completed)
       });
     }
-    return res.status(completed.status).json(completed.body);
+    return reply(completed.status,completed.body);
   } catch {
-    return res.status(502).json({error:'upstream_unavailable'});
+    return reply(502,{error:'upstream_unavailable'},phase);
   }
 }
 
