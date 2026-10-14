@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="ko">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<meta name="theme-color" content="#0b1322">
+<title>BYTE BACK | 12단계 탈환 작전실</title>
+<link rel="manifest" href="/manifest.webmanifest">
+<style>
+:root{font-family:system-ui,-apple-system,"Segoe UI",sans-serif;color-scheme:dark}
+*{box-sizing:border-box}body{margin:0;background:#0b1322;color:#f1f6ff}
+main{max-width:1260px;margin:auto;padding:32px 22px 68px}
+header{display:flex;justify-content:space-between;align-items:center;gap:18px;flex-wrap:wrap}
+a{color:#a5eef1}.eyebrow{color:#8edbe0;font-weight:700;letter-spacing:.12em;font-size:13px}
+h1{font-size:clamp(30px,4.4vw,48px);margin:10px 0}h2{font-size:20px;margin:0 0 12px}
+p{color:#bfd0e4;line-height:1.65}.muted{color:#9caec6}
+.actions{display:flex;flex-wrap:wrap;gap:10px;align-items:center;margin:20px 0}
+button{font:inherit;font-weight:700;color:#0a1722;background:#93dee3;border:0;border-radius:9px;padding:12px 16px;cursor:pointer}
+button:disabled{opacity:.55;cursor:wait}button.secondary{color:#d5edff;border:1px solid #50627b;background:#19293d}
+.notice{border:1px solid #8f6d46;background:#342618;padding:14px 18px;border-radius:12px}
+.panel{border:1px solid #3c516f;background:#152137;border-radius:14px;padding:18px;margin:20px 0}
+.statgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));gap:12px;margin:20px 0}
+.stat{border:1px solid #3c516f;border-radius:12px;padding:17px;background:#152137}
+.stat strong{font-size:32px;display:block;margin-top:8px;font-variant-numeric:tabular-nums}
+.stat .label{color:#b0c2d7;font-size:13px}
+.pill{display:inline-block;border:1px solid #49647a;padding:4px 8px;border-radius:999px;font-size:12px}
+.twrap{width:100%;overflow-x:auto}table{width:100%;min-width:880px;border-collapse:collapse;font-size:13px}
+th{text-align:left;color:#a9bbd0;font-size:12px;white-space:nowrap}td,th{padding:11px 10px;border-bottom:1px solid #34445e;vertical-align:top}
+td code{font-size:12px;color:#e4edfa}td:nth-child(1){white-space:nowrap}
+code{overflow-wrap:anywhere}.status-matched{color:#9de6c2}.status-mismatched{color:#ffb3b8}.status-not_run{color:#bfc5d0}
+.stack{display:grid;grid-template-columns:repeat(auto-fit,minmax(230px,1fr));gap:12px}
+.stack article{background:#0c1929;border:1px solid #304764;padding:15px;border-radius:10px}
+.stack strong{display:block;font-size:15px}.stack small{color:#abc0d6}
+footer{margin-top:28px;color:#849db8;font-size:13px}
+</style>
+</head>
+<body>
+<main>
+<header>
+  <div><div class="eyebrow">BYTE BACK · ALEPH STAGE 12</div>
+  <h1>탈환 작전실</h1>
+  <p>판정·탐지·회수·복구의 근거를 확인하는 화면</p></div>
+  <a href="/">← 기존 자료실 돌아가기</a>
+</header>
+<div class="notice"><strong>실제 관측과 과제 채점을 구분합니다.</strong>
+  <p>아래 41칸은 학생이 작성한 점검 계획이며 공식 41종 공격 목록이 아닙니다. ‘기대 HTTP 일치’는 해당 요청을 관측했다는 뜻이지 공식 심판 통과가 아닙니다. 보호 자료 본문과 인증값은 기록하거나 출력하지 않습니다.</p>
+</div>
+<div class="actions">
+  <button id="refresh" class="secondary" type="button">서버 기록 다시 읽기</button>
+  <button id="run" type="button">안전한 GET 점검 10종 실행</button>
+  <span id="status" role="status" aria-live="polite">서버 승인 확인 중…</span>
+</div>
+<section aria-label="실행 현황" class="statgrid">
+ <div class="stat"><span class="label">자체 계획 항목</span><strong id="planned">–</strong></div>
+ <div class="stat"><span class="label">기대 HTTP 일치</span><strong id="matched">–</strong></div>
+ <div class="stat"><span class="label">기대 HTTP 불일치</span><strong id="mismatched">–</strong></div>
+ <div class="stat"><span class="label">미실행</span><strong id="not-run">–</strong></div>
+ <div class="stat"><span class="label">가린 서버 점검 기록</span><strong id="logs-count">–</strong></div>
+</section>
+<section class="panel" aria-labelledby="summarytitle">
+<h2 id="summarytitle">작전 현황 · 근거 출처</h2>
+<div class="stack">
+ <article><strong>판정기 규칙</strong><p id="policy">미확인</p><small>학생 소스의 RULE_IDS, 실시간 엔진 판정 내역 아님</small></article>
+ <article><strong>탐지 사건</strong><p id="detect">미확인</p><small>실제 탐지 사건 피드 미연결 시 미실행 표시</small></article>
+ <article><strong>회수 상태</strong><p id="revoke">미확인</p><small>ALEPH SDP 엔진의 회수 집행 실측은 별도</small></article>
+ <article><strong>복구 사본 및 기록</strong><p id="restore">미확인</p><small>소유자 기준 DB 메타데이터만 집계</small></article>
+</div>
+<p id="updated" class="muted"></p>
+</section>
+<section class="panel">
+<h2>1~11단계 정상·금지 요청 검증표</h2>
+<p>실제 실행한 항목에는 서버 요청 ID, HTTP 상태, 확인 시각이 남습니다. 미실행 항목은 절대 자동 합격 처리하지 않습니다.</p>
+<div class="twrap"><table><thead><tr><th>항목</th><th>구분</th><th>요청</th><th>기대</th><th>실제 HTTP</th><th>상태</th><th>요청 ID</th><th>확인 시각</th></tr></thead>
+<tbody id="checks"><tr><td colspan="8">서버 데이터 확인 중</td></tr></tbody></table></div>
+</section>
+<section class="panel">
+<h2>가린 서버 실측 기록</h2>
+<p>기대값과 실제 HTTP 결과는 위 검증표와 동일한 서버 기록을 사용합니다. 쿠키·헤더·사용자 정보·메모 본문은 저장하지 않습니다.</p>
+<div class="twrap"><table><thead><tr><th>요청 ID</th><th>실행 시각</th><th>요청</th><th>기대</th><th>관측</th><th>결과</th></tr></thead>
+<tbody id="logs"><tr><td colspan="6">실측 기록 없음</td></tr></tbody></table></div>
+</section>
+<footer>제공 엔진: ALEPH SDP 엔진 · 학생 코드: src/decider.mjs, src/detect.mjs, /api/ops · 실제 심판 총공세 결과는 별도 확인합니다.</footer>
+</main>
+<script src="/ops.js" type="module"></script>
+</body>
+</html>
