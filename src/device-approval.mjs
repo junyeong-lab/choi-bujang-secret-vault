@@ -8,7 +8,7 @@ const HANDLE=/^[A-Za-z0-9_-]{43}$/u;
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
 const STATUSES=new Set(['pending','approved','revoked']);
 const MAX_ACTIVE=5;
-const AGE_SECONDS=30*24*60*60;
+const AGE_SECONDS=7*24*60*60;
 const digest=text=>createHash('sha256').update(text,'utf8').digest('hex');
 export function cookieValue(req,name){
   const raw=(req?.headers?.cookie??'').split(';')
@@ -60,14 +60,24 @@ async function myDevice({req,identity,db}){
   const handle=cookieValue(req,DEVICE_COOKIE);
   if(!HANDLE.test(handle??''))return {status:'unregistered',approved:false};
   const rows=await deviceDb(db,'GET',{
-    select:'id,status,requested_at,decided_at',
+    select:'id,status,requested_at,approved_at,expires_at,decided_at',
     handle_sha256:'eq.'+digest(handle),
     owner_id:'eq.'+identity.userId,limit:'1'
   });
   const record=rows[0];
   if(!record)return {status:'unregistered',approved:false};
+  const expires=Date.parse(record.expires_at??'');
+  const now=Date.now();
+  if(!Number.isFinite(expires)||expires<=now)
+    return {status:'expired',approved:false,deviceId:record.id};
   const status=STATUSES.has(record.status)?record.status:'unregistered';
-  return {status,approved:status==='approved',deviceId:record.id};
+  const approvedAt=Date.parse(record.approved_at??'');
+  // An approval badge alone is insufficient: the DB operator must have
+  // recorded approval time, which must be valid and not in the future.
+  const verified=status==='approved'&&Number.isFinite(approvedAt)&&
+    approvedAt<=now&&approvedAt>=Date.parse(record.requested_at);
+  return {status:verified?'approved':status==='approved'?'verification_failed':status,
+    approved:verified,deviceId:record.id};
 }
 export async function deviceSessionStatus({req,identity,db}){
   return myDevice({req,identity,db});
@@ -106,7 +116,8 @@ export async function requestDeviceRegistration({req,identity,db}){
   if(existing.length>=MAX_ACTIVE)return {code:429,body:{error:'device_limit'}};
   const handle=randomBytes(32).toString('base64url');
   const records=await deviceDb(db,'POST',{},{
-    owner_id:identity.userId,handle_sha256:digest(handle),status:'pending'
+    owner_id:identity.userId,handle_sha256:digest(handle),status:'pending',
+    expires_at:new Date(Date.now()+AGE_SECONDS*1000).toISOString()
   });
   if(records.length!==1||!UUID.test(records[0].id))
     throw Error('device_registration_failed');
