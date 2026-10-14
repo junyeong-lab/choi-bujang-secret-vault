@@ -8,7 +8,7 @@ import { resolve, join } from 'node:path';
 const root = resolve(import.meta.dirname, '..');
 const git = (...args) => execFileSync('git', args, { cwd: root, encoding: 'utf8' }).trim();
 
-test('the ACTUAL scripts/bundle.mjs invocation uses only approved modeled Git reads', () => {
+test('the ACTUAL scripts/bundle.mjs runs with zero subprocess calls and one public pinned commit GET', () => {
   const temp = mkdtempSync(join(tmpdir(), 'aleph12-bundle-'));
   const trace = join(temp, 'commands.jsonl');
   const notesFile = join(root, 'bundle-notes.json');
@@ -30,18 +30,18 @@ test('the ACTUAL scripts/bundle.mjs invocation uses only approved modeled Git re
     const commands = existsSync(trace)
       ? readFileSync(trace, 'utf8').trim().split(/\r?\n/u).filter(Boolean).map(JSON.parse)
       : [];
-    // Check actual child-process calls, not just source string patterns.
-    assert.deepEqual(commands.map(({ executable, args }) => ({ executable, args })), [
-      { executable: 'git', args: ['rev-parse', 'HEAD'] },
-      { executable: 'git', args: ['show', 'HEAD'] }
-    ], 'actual subprocess command+argument list changed');
-    assert.ok(commands.every(x => x.shell === false && x.optionKeys.includes('cwd')),
-      'no shell or uncontrolled git working directory is allowed');
-    // Intentionally print only executable, arguments and option key names.
-    // Never print the environment, credential values, or Git output.
-    console.log('BUNDLE_PROCESSES', JSON.stringify(commands.map(c => ({
-      executable: c.executable, args: c.args, optionKeys: c.optionKeys, shell: c.shell
-    }))));
+    // This is an actual run of the entire entrypoint. No child process of
+    // any kind is permitted, not even one calling Git.
+    assert.equal(commands.filter(x => x.type === 'subprocess').length, 0,
+      'bundle attempted a forbidden child process');
+    const requests = commands.filter(x => x.type === 'https_request');
+    assert.equal(requests.length, 1, 'bundle may only look up one pinned public commit');
+    assert.equal(requests[0].method, 'GET');
+    assert.equal(requests[0].origin, 'https://api.github.com');
+    assert.match(requests[0].pathname,
+      /^\/repos\/junyeong-lab\/choi-bujang-secret-vault\/commits\/[a-f0-9]{40}$/u);
+    // Only safe command/request metadata are logged.
+    console.log('BUNDLE_EXTERNAL_OPERATIONS', JSON.stringify(commands));
     assert.equal(run.status, 0, 'isolated bundle execution failed: ' +
       (run.stderr || run.error?.message || 'exit without error text').slice(0, 350));
     const bundle = JSON.parse(readFileSync(join(root, 'artifacts/submission.json'), 'utf8'));
