@@ -4,6 +4,12 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BYTE BACK | 점령된 자료실</title>
+  <meta name="theme-color" content="#101a28">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <link rel="manifest" href="/manifest.webmanifest">
+  <link rel="icon" type="image/svg+xml" href="/app-icon.svg">
+  <link rel="apple-touch-icon" href="/app-icon-192.png">
   <style>
     :root { color-scheme: dark; font-family: system-ui, sans-serif; }
     body { margin: 0; min-height: 100vh; background: #101a28; color: #ecf4ff; }
@@ -26,6 +32,12 @@
     .auth-panel [hidden] { display: none; }
     #auth-message { min-height: 1.5em; margin: 12px 0 0; font-size: 14px; }
     #auth-message[data-error="true"] { color: #ffbdc7; }
+    .device-panel { border: 1px solid #547f8d; border-radius: 14px; background: #142b37; padding: 20px; margin: 20px 0; }
+    .device-panel h2 { margin: 0 0 14px; font-size: 21px; }
+    .device-panel p { margin: 8px 0; font-size: 15px; line-height: 1.7; }
+    .device-panel .device-status { padding: 10px 12px; background: #203c4a; border-radius: 9px; font-weight: 650; color: #e8fbff; }
+    .device-panel .device-warning { color: #ffdfaa; }
+    .device-panel .device-detail { color: #bdd5e3; }
     .memo-panel { border: 1px solid #51667c; border-radius: 14px; background: #1a2a3d; padding: 18px; margin: 20px 0; }
     .memo-panel[hidden] { display:none; }
     .memo-panel form { display:grid; gap:10px; }
@@ -37,7 +49,7 @@
 </head>
 <body>
   <main>
-    <div class="eyebrow">BYTE BACK · 5단계 서버 보호 자료</div>
+    <div class="eyebrow">BYTE BACK · 11단계 접속 앱 준비</div>
     <h1>점령된 자료실</h1>
     <p>메모는 공개 정적 파일이 아니라 서버 API에서 가져옵니다. 아래는 학습용 가상 자료입니다.</p>
     <div class="notice">서버는 로그인 토큰을 검증하고 메모 소유자를 확인한 뒤, 로그인한 사용자 본인의 메모만 반환합니다.</div>
@@ -53,6 +65,15 @@
       </form>
       <button id="logout-button" type="button" hidden>로그아웃</button>
       <p id="auth-message" role="status" aria-live="polite"></p>
+    </section>
+    <section class="device-panel" aria-labelledby="device-title">
+      <h2 id="device-title">설치형 접속 앱 · 기기 상태</h2>
+      <p id="app-install-status" class="device-detail" role="status">앱 실행 환경을 확인 중입니다.</p>
+      <p id="device-approval-status" class="device-status" role="status" aria-live="polite">서버 기기 승인: 미확인</p>
+      <p class="device-warning">홈 화면에 앱을 설치했더라도 기기가 승인된 것은 아닙니다. 승인 여부는 서버와 판정기가 확인해야 합니다.</p>
+      <p class="device-detail">기기 승인 요청과 승인 전 자료 차단은 다음 제작 단계에서 연결합니다. 지금은 기존 로그인·자료실 동작을 유지합니다.</p>
+      <p id="network-status" class="device-detail" role="status" aria-live="polite">네트워크 상태를 확인 중입니다.</p>
+      <p class="device-detail">오프라인에서는 로그인 확인 및 보호 메모를 사용할 수 없습니다. 저장된 비공개 자료는 제공하지 않습니다.</p>
     </section>
     <section id="memo-panel" class="memo-panel" hidden>
       <h2 id="memo-heading">가상 메모 추가</h2>
@@ -84,6 +105,9 @@ async function authRequest(path, options = {}) {
     const loginButton = document.querySelector('#login-button');
     const authState = document.querySelector('#auth-state');
     const authMessage = document.querySelector('#auth-message');
+    const deviceApprovalStatus = document.querySelector('#device-approval-status');
+    const appInstallStatus = document.querySelector('#app-install-status');
+    const networkStatus = document.querySelector('#network-status');
     const list = document.querySelector('#notes');
     const memoPanel = document.querySelector('#memo-panel');
     const memoForm = document.querySelector('#memo-form');
@@ -103,6 +127,10 @@ async function authRequest(path, options = {}) {
     }
     function renderAuth(user) {
       authState.textContent = user ? `로그인됨: ${user.email ?? '이메일 비공개'}` : '로그아웃 상태입니다.';
+      // Login and installation do not establish server-approved device status.
+      deviceApprovalStatus.textContent = user
+        ? '서버 기기 승인: 미확인 (로그인만 확인됨)'
+        : '서버 기기 승인: 미확인 (로그인 필요)';
       loginForm.hidden = Boolean(user);
       logoutButton.hidden = !user;
       memoPanel.hidden = !user;
@@ -292,6 +320,32 @@ async function restoreSession() {
   }
 }
 
+// Install mode is a UI hint only; it is never sent as device identity evidence.
+function updateInstallStatus() {
+  const standalone = window.matchMedia('(display-mode: standalone)').matches ||
+    navigator.standalone === true;
+  appInstallStatus.textContent = standalone
+    ? '실행 형태: 홈 화면 앱 (기기 승인 증거가 아닙니다)'
+    : '실행 형태: 웹브라우저 (지원되는 환경에서는 홈 화면에 추가할 수 있습니다)';
+}
+function updateNetworkStatus() {
+  networkStatus.textContent = navigator.onLine === false
+    ? '오프라인 감지: 서버 승인 확인과 보호 자료 이용이 불가능합니다.'
+    : '네트워크 연결 상태: 서버 요청으로 확인합니다. 보호 자료는 오프라인 저장하지 않습니다.';
+}
+window.addEventListener('online', updateNetworkStatus);
+window.addEventListener('offline', updateNetworkStatus);
+window.addEventListener('appinstalled', updateInstallStatus);
+window.matchMedia('(display-mode: standalone)').addEventListener?.('change', updateInstallStatus);
+updateInstallStatus();
+updateNetworkStatus();
+if ('serviceWorker' in navigator) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register('/sw.js').catch(() => {
+      // Offline screen registration must never interfere with authentication.
+    });
+  });
+}
 void restoreSession();
 
   </script>
