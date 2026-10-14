@@ -1,3 +1,4 @@
+import {requireApprovedDevice} from '../../src/device-approval.mjs';
 // Stage 10: authenticated, single-memo snapshot restoration (preview by default).
 // Source is a *test baseline captured after stage 9*, not a historical pre-breach backup.
 // The handler never accepts a client-provided owner or writes note text to logs/JSON.
@@ -295,6 +296,7 @@ export default async function handler(req,res) {
     cachedVerifier ??= createLoginVerifier({config,supabaseSecretKey:secret});
     const identity=await cachedVerifier(authorization);
     if (!identity) return reply(401,{error:'unauthorized'});
+    if (!await requireApprovedDevice(req,res,identity,{origin,secret})) return;
     phase='request_body';
     let body;
     try {
