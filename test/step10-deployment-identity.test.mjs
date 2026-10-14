@@ -16,15 +16,15 @@ const config = {
   sampleMarker:'SAMPLE_NOTE_1',
   publicAppUrl:'https://choi-bujang-secret-vault-pi.vercel.app',
   identityProvider:{issuer:'https://example.supabase.co/auth/v1',audience:'authenticated',jwksUrl:'https://example.supabase.co/auth/v1/.well-known/jwks.json'},
-  allowedRoutes:['GET /api/memos', 'POST /api/restore/memo'],
+  allowedRoutes:['GET /api/memos', 'POST /api/restore/memo','POST /api/restore/notes/:id'],
   originalApiUrl:'https://example.supabase.co/rest/v1/vault_memos',
   database:{schema:'aleph.defense.database.v1',url:'https://example.supabase.co',publishableKey:'sb_publishable_example',table:'vault_memos'},
-  restoreRoute:'POST /api/restore/memo',
+  restoreRoute:'POST /api/restore/notes/:id',
 };
 
 test('step10 publishes the registered restore route and the canonical production URL',()=>{
   const result=deploymentIdentity(env,config);
-  assert.equal(result.restoreRoute, 'POST /api/restore/memo');
+  assert.equal(result.restoreRoute, 'POST /api/restore/notes/:id');
   assert.equal(result.publicAppUrl, config.publicAppUrl);
   assert.deepEqual(result.identityProvider,config.identityProvider);
   assert.deepEqual(result.allowedRoutes,config.allowedRoutes);
