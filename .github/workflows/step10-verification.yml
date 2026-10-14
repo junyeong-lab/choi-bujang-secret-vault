@@ -56,7 +56,7 @@ jobs:
         run: node --test test/xdr-run.test.mjs
       - name: Prepare excluded submission notes
         run: |
-          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"11단계: PWA manifest·아이콘·공개 오프라인 안내, 기기 등록 요청과 WebAuthn 서명 확인, 관리자 승인 전 보호 자료 API 거부, 승인 후 검증된 단기 HttpOnly 세션으로 접근합니다. 실제 브라우저 등록·관리자 승인·실제 운영 단말기 접속은 아직 실행하지 않았으며 모의 기기 서명·가짜 세션으로 접근 통제를 테스트했습니다. 10단계 통과 복원 경로와 1~9단계 규칙을 보존했습니다.",blockedAt:null},null,2)+"\n","utf8")'
+          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"11단계: PWA manifest·아이콘·공개 오프라인 안내, 기기 등록 요청과 WebAuthn 서명 확인, 관리자 승인 전 보호 자료 API 거부, 승인 후 검증된 단기 HttpOnly 세션으로 접근합니다. 2026-10-14 실제 브라우저 패스키 등록·관리자 별도 승인·패스키 재확인 뒤 메모 표시와 서버의 유효 세션 1건을 확인했습니다. 미승인 기기의 실제 HTTP 403은 추가 실측 전이며 모의 요청에서 거부를 확인했습니다. 10단계 통과 복원 경로와 1~9단계 규칙을 보존했습니다.",blockedAt:null},null,2)+"\n","utf8")'
       - name: Build submission bundle using live anonymous checks
         run: npm run bundle
       - name: Check step 11 bundle contents
