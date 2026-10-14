@@ -30,7 +30,7 @@ jobs:
       - name: Validate policy backup, restore, and fail-closed boundaries
         run: node --test test/step10-policy-diff.test.mjs test/step10-policy-restore.test.mjs
       - name: Validate single-memo restore endpoint and no-leak guard
-        run: node --test test/step10-restore-api.test.mjs test/step10-restore-alias.test.mjs
+        run: node --test test/step10-restore-api.test.mjs test/step10-restore-alias.test.mjs test/step10-env-restore.test.mjs
       - name: Verify post-restoration retest lifecycle
         run: node --test test/step10-post-restore-retest.test.mjs
       - name: Verify step-10 public restore discovery and canonical URL
