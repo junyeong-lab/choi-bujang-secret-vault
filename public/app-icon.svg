@@ -1,0 +1,9 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" role="img" aria-labelledby="title">
+<title id="title">BYTE BACK 자료실 앱 아이콘</title>
+<rect width="512" height="512" rx="112" fill="#101a28"/>
+<rect x="112" y="112" width="288" height="288" rx="50" fill="#1a2a3d" stroke="#8ad8df" stroke-width="20"/>
+<rect x="156" y="156" width="200" height="200" rx="28" fill="#101a28" stroke="#536f83" stroke-width="9"/>
+<circle cx="256" cy="256" r="58" fill="none" stroke="#8ad8df" stroke-width="18"/>
+<circle cx="256" cy="256" r="13" fill="#8ad8df"/>
+<path d="M256 199v-27M256 340v-27M199 256h-27M340 256h-27" stroke="#8ad8df" stroke-width="14" stroke-linecap="round"/>
+</svg>
