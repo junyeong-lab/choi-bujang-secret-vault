@@ -60,7 +60,7 @@ jobs:
         run: node --test test/xdr-run.test.mjs
       - name: Prepare excluded submission notes
         run: |
-          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"11단계: PWA manifest·아이콘·공개 오프라인 안내, 기기 승인 요청은 서버 발급 불투명 핸들만 HttpOnly 쿠키로 보관하고 DB에는 SHA-256 지문만 저장합니다. 새 기기는 pending부터 시작하며 별도 관리자 승인 후 서버 확인 결과로만 자료실 접근을 허용합니다. 브라우저에서 기기 개인키·WebAuthn 패스키를 만들거나 JavaScript 저장소에 두지 않습니다. 기존 11단계 WebAuthn 방식의 실측은 이전 버전 증빙이며 새 서버 핸들 방식은 자동 테스트로 검증 중입니다. 신규 기기 승인 및 실제 배포 403/200 요청은 아직 실측 전이며, 승인 대기 중 자료 접근을 허용하지 않습니다. 10단계 통과 복원 경로와 1~9단계 규칙을 보존했습니다.",blockedAt:null},null,2)+"\n","utf8")'
+          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"11단계: PWA manifest·아이콘·공개 오프라인 안내, 기기 승인 요청은 서버 발급 불투명 핸들만 HttpOnly 쿠키로 보관하고 DB에는 SHA-256 지문만 저장합니다. 새 기기는 pending부터 시작하며 별도 관리자 승인 시각이 요청 이후이고 7일 만료 전이며 소유자·해시가 일치할 때만 서버가 자료 접근을 허용합니다. 재확인 실패·오프라인에서는 메모 목록과 편집 내용을 즉시 지웁니다. 브라우저에서 기기 개인키·WebAuthn 패스키를 만들거나 JavaScript 저장소에 두지 않습니다. 기존 11단계 WebAuthn 방식의 실측은 이전 버전 증빙이며 새 서버 핸들 방식은 자동 테스트로 검증 중입니다. 신규 기기 승인 및 실제 배포 403/200 요청은 아직 실측 전이며, 승인 대기 중 자료 접근을 허용하지 않습니다. 10단계 통과 복원 경로와 1~9단계 규칙을 보존했습니다.",blockedAt:null},null,2)+"\n","utf8")'
       - name: Build submission bundle using live anonymous checks
         run: npm run bundle
       - name: Check step 11 bundle contents
