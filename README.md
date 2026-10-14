@@ -696,3 +696,10 @@ node --test test/step10-policy-diff.test.mjs
 - aleph.config.json은 step 12이고 기존 발급자, 원본 DB, judgeIssuer, restoreRoute 및 과거 API 경로를 유지합니다.
 - GitHub Actions에서 npm ci, npm install, 1~11단계 회귀 검사와 12단계 테스트, npm run bundle을 실행해 step12-submission 아티팩트를 생성합니다. 비밀값과 실제 메모 본문은 제출 묶음에 포함하지 않습니다.
 - 공식 12단계 심판 결과와 공식 총공세 41종 방어는 아직 미확인입니다. 자기 점검, 로컬 테스트, Production HTTP, 심판 결과를 서로 혼동하지 않습니다.
+
+### 12단계 저장점
+
+- 12단계 기능: /ops.html, 로그인·기기 승인 보호 /api/ops, 자체 41칸 중 GET 10종 실측, 요청 ID·HTTP·시각을 포함한 가린 서버 기록, 31개 미실행 표시, 기존 정책·탐지·복구 출처 구분.
+- 배포 기준 준비 확인: GitHub Actions run 38519744672에서 npm ci/npm install/1~11단계 회귀/12단계 테스트/npm run bundle 성공, Vercel 중간 커밋 0bc44a5f 배포 READY. 최종 저장점 커밋에서도 다시 확인합니다.
+- 학생 자체 검증의 HTTP 관측과 ALEPH 공식 심판의 41종 공격 결과를 동일시하지 않습니다. 10종의 승인된 사용자의 실제 버튼 점검은 실행 전이며 실행 여부에 따라 화면에 기록합니다.
+- 기존 11단계 100점 코드는 step11-100-pass-before-step12-20261014에 보존했고, 기존 메모·복원 사본·감사·기기 승인 데이터는 삭제하지 않았습니다.
