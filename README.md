@@ -703,3 +703,13 @@ node --test test/step10-policy-diff.test.mjs
 - 배포 기준 준비 확인: GitHub Actions run 38519744672에서 npm ci/npm install/1~11단계 회귀/12단계 테스트/npm run bundle 성공, Vercel 중간 커밋 0bc44a5f 배포 READY. 최종 저장점 커밋에서도 다시 확인합니다.
 - 학생 자체 검증의 HTTP 관측과 ALEPH 공식 심판의 41종 공격 결과를 동일시하지 않습니다. 10종의 승인된 사용자의 실제 버튼 점검은 실행 전이며 실행 여부에 따라 화면에 기록합니다.
 - 기존 11단계 100점 코드는 step11-100-pass-before-step12-20261014에 보존했고, 기존 메모·복원 사본·감사·기기 승인 데이터는 삭제하지 않았습니다.
+
+
+### 12단계 격리 심판 실행 제한 반영 (2026-10-14)
+
+- 반복된 공식 심판 `S12_BUNDLE_UNSUPPORTED`(0점)의 원인이 제출 실행 중 제한된 기능 사용으로 보고됐습니다. GitHub Actions 통과와 공식 심판 성공은 다릅니다.
+- 12단계 제출 묶음 호출 경로 `scripts/bundle.mjs → src/attack-check.mjs`에서, 통과 사례 `minsanghwang/choi-bujang-secret-vault`의 12단계 방식에 맞춰 **제출 시 외부 HTTP 요청을 수행하지 않습니다.**
+- 제출 `attackAttempts`의 18개는 모두 `observed: "not_run"`으로 표시합니다. 이는 공식 41종 공격이나 실제 승인·타인 메모 시험이 수행되었다는 주장이 아닙니다.
+- 이미 실제 수행한 안전한 GET 요청 10건과 시각·요청 ID는 **기존 /ops.html 및 step12_ops_checks DB**에 별도로 보존합니다. 제출 묶음의 미실행 표기와 작전실 서버 실측은 별개의 실행 경로입니다.
+- 격리 무네트워크 단위 테스트 `test/step12-bundle-isolation.test.mjs`에서 제출 점검 중 `fetch` 호출이 0건임을 검증합니다. 실제 ALEPH 심판의 해당 오류 해결 및 총공세 판정은 재제출 결과로 확인해야 합니다.
+- 이전 코드 전체 백업: `backup-stage12-before-peer-rebuild-20261014` (커밋 `819ab86a`). 기존 11단계 100점 백업도 유지합니다.
