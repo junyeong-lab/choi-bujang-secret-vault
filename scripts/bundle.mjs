@@ -1,15 +1,54 @@
-import { execFileSync } from 'node:child_process';
-import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
+import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 import { pathToFileURL } from 'node:url';
 
 const root = resolve(import.meta.dirname, '..');
-// Stage 12 isolated execution permits subprocess calls only for Git reads.
-// Keep every Git subcommand explicit; no git status/config/remote and no shell.
-const gitReadOptions = {
-  cwd: root, encoding: 'utf8', timeout: 5000,
-  maxBuffer: 512 * 1024, windowsHide: true,
-};
+// Read the real checkout HEAD using fs. No child processes in the bundle.
+function readCheckoutSha() {
+  let gitDir = join(root, '.git');
+  if (!existsSync(join(gitDir, 'HEAD'))) {
+    const marker = readFileSync(gitDir, 'utf8').trim();
+    const match = /^gitdir: (.+)$/u.exec(marker);
+    if (!match) throw Error('git_checkout_missing');
+    gitDir = resolve(root, match[1]);
+  }
+  const head = readFileSync(join(gitDir, 'HEAD'), 'utf8').trim();
+  const isSha = value => /^[a-f0-9]{40}$/u.test(value);
+  if (isSha(head)) return head;
+  const ref = /^ref: (refs\/[A-Za-z0-9._/-]+)$/u.exec(head)?.[1];
+  if (!ref || ref.includes('..') || ref.includes('//')) throw Error('invalid_git_ref');
+  const refPath = join(gitDir, ref);
+  if (existsSync(refPath)) {
+    const sha = readFileSync(refPath, 'utf8').trim();
+    if (isSha(sha)) return sha;
+    throw Error('invalid_git_ref_sha');
+  }
+  const packed = readFileSync(join(gitDir, 'packed-refs'), 'utf8');
+  const record = packed.split(/\r?\n/u).find(line => line.endsWith(' ' + ref));
+  const sha = record?.slice(0, 40);
+  if (!isSha(sha)) throw Error('missing_git_ref_sha');
+  return sha;
+}
+async function readCommitFiles(repoUrl, commit) {
+  const rootUrl = new URL(repoUrl);
+  const match = /^\/([A-Za-z0-9-]+)\/([A-Za-z0-9._-]+)$/u.exec(rootUrl.pathname);
+  if (!match || rootUrl.origin !== 'https://github.com') throw Error('invalid_git_origin');
+  const endpoint = 'https://api.github.com/repos/' + match[1] + '/' + match[2] + '/commits/' + commit;
+  const response = await fetch(endpoint, {
+    method: 'GET', redirect: 'error', cache: 'no-store',
+    headers: { Accept: 'application/vnd.github+json', 'User-Agent': 'aleph-bundle-public-commit-read' },
+    signal: AbortSignal.timeout(12000)
+  });
+  if (!response.ok) throw Error('public_commit_http_' + response.status);
+  const data = await response.json();
+  if (data?.sha !== commit || !Array.isArray(data.files) ||
+      !data.files.length || data.files.length >= 300) throw Error('invalid_commit_files');
+  const paths = data.files.map(item => item.filename);
+  if (paths.some(p => typeof p !== 'string' || !/^[A-Za-z0-9_./-]+$/u.test(p)
+      || p.includes('..') || p.startsWith('/')) || new Set(paths).size !== paths.length)
+    throw Error('invalid_commit_path');
+  return paths.sort();
+}
 const fail = (message) => { throw new Error(message); };
 const secretPattern = /-----BEGIN [A-Z ]*PRIVATE KEY-----|\bBearer\s+[A-Za-z0-9._~+/-]{16,}|\bsb_secret_[A-Za-z0-9_-]{12,}|\bsk-[A-Za-z0-9_-]{20,}|\beyJ[A-Za-z0-9_-]{12,}\.eyJ[A-Za-z0-9_-]{12,}\.[A-Za-z0-9_-]{8,}|[A-Z0-9._%+-]+@[A-Z0-9.-]+\.[A-Z]{2,}/iu;
 const repository = /^https:\/\/github\.com\/([A-Za-z0-9](?:[A-Za-z0-9-]{0,37}[A-Za-z0-9])?)\/([A-Za-z0-9._-]{1,100})\/?$/iu;
@@ -24,25 +63,12 @@ const normalizedRepo = value => {
 };
 
 try {
-  // These three calls read the pinned commit only. The official grader's
-  // isolated environment may reject Git operations inspecting worktree,
-  // config, remotes or other commands, even if local CI allows them.
-  const commit = execFileSync('git', ['rev-parse', 'HEAD'], gitReadOptions).trim();
-  // A plain Git commit read provides the actual diff file names without
-  // relying on git-show pretty/name-only option parsing by the sandbox.
-  // Only Git diff header lines are considered, not the patch text.
-  const headDiff = execFileSync('git', ['show', 'HEAD'], gitReadOptions);
-  const changedFiles = [...new Set(headDiff.split(/\r?\n/u).flatMap(line => {
-    const match = /^diff --git a\/(.+) b\/(.+)$/u.exec(line);
-    if (!match) return [];
-    if (!/^[A-Za-z0-9_.\/-]+$/u.test(match[2])) fail('커밋 파일 경로를 확인해 주세요.');
-    return [match[2]];
-  }))].sort();
-  if (!changedFiles.length) fail('마지막 커밋에 바뀐 파일이 없습니다.');
-  // The judge permits node:fs. Read checked-out configuration without
-  // an additional git subprocess. No remote/config/worktree access occurs.
+  // Source-of-truth commit from the checkout, file list from its public
+  // GitHub record. No Git executable is spawned in the isolated bundle.
+  const commit = readCheckoutSha();
   const config = JSON.parse(readFileSync(join(root, 'aleph.config.json'), 'utf8'));
   const repoUrl = normalizedRepo(config.repoUrl);
+  const changedFiles = await readCommitFiles(repoUrl, commit);
   const notes = JSON.parse(readFileSync(join(root, 'bundle-notes.json'), 'utf8'));
   if (!Number.isInteger(config.step) || config.step < 1 || config.step > 12) fail('aleph.config.json의 step을 확인해 주세요.');
   if (config.step >= 3 && (!config.identityProvider || typeof config.identityProvider !== 'object'
