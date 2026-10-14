@@ -1,0 +1,54 @@
+name: XDR-04-06 branch-only offline preflight
+
+on:
+  push:
+    branches: [bonus-xdr-04-06-work-20261014]
+    paths:
+      - 'xdr/persistence/**'
+      - 'xdr/privilege/**'
+      - 'xdr/exfiltration/**'
+      - 'xdr/README.md'
+      - 'test/xdr-bonus.test.mjs'
+      - '.github/workflows/xdr-bonus-preflight.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  offline-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify protected policy and fixture hashes
+        run: |
+          test "$(git hash-object src/decider.mjs)" = "55192826188e2842cf8b025d9a935c278f067909"
+          test "$(git hash-object xdr/fixtures/known-cve.json)" = "d0f444a98e457a579fbce613012485d49936b17c"
+          test "$(git hash-object xdr/fixtures/persistence.json)" = "8dfb349b02cb0fd107a751c148be6165aa8c2725"
+          test "$(git hash-object xdr/fixtures/privilege.json)" = "442fc3297bcc73969fa61b1368d08e0038b9c135"
+          test "$(git hash-object xdr/fixtures/exfiltration.json)" = "ccd294ff72eade41f13c350d69b05a42c346ba40"
+      - name: Test new and existing XDR modules
+        run: node --test test/xdr-run.test.mjs test/xdr-known-cve.test.mjs test/xdr-bonus.test.mjs
+      - name: Execute real runners
+        run: |
+          npm run xdr:run -- persistence
+          npm run xdr:run -- privilege
+          npm run xdr:run -- exfiltration
+      - name: Verify result reproducibility
+        run: |
+          git diff --exit-code -- xdr/persistence/result.json xdr/privilege/result.json xdr/exfiltration/result.json
+          node --input-type=module -e 'import fs from "node:fs";for(const [m,e] of [["persistence",[8,8,8]],["privilege",[9,8,9]],["exfiltration",[10,10,10]]]){const r=JSON.parse(fs.readFileSync("xdr/"+m+"/result.json"));const a=JSON.parse(fs.readFileSync("xdr/fixtures/"+m+".json"));if(r.decisions.length!==a.alerts.length||e.some((v,i)=>v!==[r.counts.block,r.counts.alert,r.counts.record][i]))throw Error(m+" mismatch");console.log(m,JSON.stringify(r.counts),"total",r.decisions.length)}'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xdr04-06-branch-preflight-results
+          path: |
+            xdr/persistence/result.json
+            xdr/privilege/result.json
+            xdr/exfiltration/result.json
+          if-no-files-found: error
