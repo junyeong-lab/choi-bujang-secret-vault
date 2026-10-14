@@ -55,7 +55,7 @@ jobs:
         run: npm run bundle
       - name: Check step 10 bundle contents
         run: |
-          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==10||x.restoreRoute!=="POST /api/restore/memo"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==4)process.exit(1);console.log("STEP10",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==10||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==4)process.exit(1);console.log("STEP10",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
       - name: Archive submission JSON
         uses: actions/upload-artifact@v4
         with:
