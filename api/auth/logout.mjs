@@ -24,10 +24,12 @@ export default async function handler(req, res) {
     return res.status(403).json({ error: 'invalid_origin' });
   }
 
-  res.setHeader(
-    'Set-Cookie',
-    'vault_session=; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=0'
-  );
+  // Clear both login and device-verification HttpOnly cookies. Previously
+  // approved device credentials stay under explicit server admin control.
+  res.setHeader('Set-Cookie', [
+    'vault_session=; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=0',
+    'vault_device=; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=0'
+  ]);
 
   return res.status(200).json({ success: true });
 }
