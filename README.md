@@ -703,3 +703,14 @@ node --test test/step10-policy-diff.test.mjs
 - 배포 기준 준비 확인: GitHub Actions run 38519744672에서 npm ci/npm install/1~11단계 회귀/12단계 테스트/npm run bundle 성공, Vercel 중간 커밋 0bc44a5f 배포 READY. 최종 저장점 커밋에서도 다시 확인합니다.
 - 학생 자체 검증의 HTTP 관측과 ALEPH 공식 심판의 41종 공격 결과를 동일시하지 않습니다. 10종의 승인된 사용자의 실제 버튼 점검은 실행 전이며 실행 여부에 따라 화면에 기록합니다.
 - 기존 11단계 100점 코드는 step11-100-pass-before-step12-20261014에 보존했고, 기존 메모·복원 사본·감사·기기 승인 데이터는 삭제하지 않았습니다.
+
+
+### S12_BUNDLE_UNSUPPORTED 격리 실행 조사 및 저장점 (2026-10-14)
+
+- 확인된 공식 평가: 제출 커밋 `5906b1b19fa5509ab2cb897bad123708c01ea879`, 점수 **0/100**, 실패 코드 **S12_BUNDLE_UNSUPPORTED**. 설명은 `npm run bundle`의 제출 확인용 Git 읽기 외 명령 사용이며, 어떤 세부 명령을 차단했는지는 공개되지 않았습니다. 이 오류만으로 무인증 조회·타인 메모 방어 실패를 확정하지 않습니다.
+- 이전 실패 수정들은 `git config`·`remote` 제거와 HTTP 점검 분리였지만 동일 코드가 반복됐습니다. 이번에는 `package.json`에서 `prebundle/postbundle`이 없음을 확인하고, `scripts/bundle.mjs → src/decider.mjs + src/attack-check.mjs` 전체 경로를 조사했습니다. 두 동적 import의 최상위 하위 프로세스 호출은 없습니다.
+- 제출 실행에서는 Git 읽기 2회(`git rev-parse HEAD`, `git show HEAD`)로 실제 커밋 및 마지막 커밋 변경 파일 목록을 읽습니다. 배포 설정은 `node:fs`로 체크아웃 파일에서 읽습니다. Git 작업트리 검사는 `npm run bundle` 밖의 GitHub Actions 단계로 분리했습니다.
+- `test/step12-bundle-end-to-end.test.mjs`는 실제 `scripts/bundle.mjs`를 별도 Node 프로세스로 실행하며 `test/helpers/bundle-command-guard.cjs`를 먼저 로드합니다. 전송 요청은 차단하고 실제 자식 프로세스 명령·전체 인자·옵션 키를 수집해 사전 허용한 Git 읽기만 있는지 검증하며, 결과 JSON의 commit/changedFiles를 실제 Git 기록과 비교합니다.
+- 검증 순서: 깨끗한 Git 체크아웃에서 `npm ci`, `npm install`, 기존 1~11단계 회귀 테스트, `node --test test/step12-bundle-end-to-end.test.mjs`, `npm run bundle`입니다. `bundle-notes.json`은 비밀값 없는 임시 입력으로 만들며 `artifacts/submission.json`과 함께 커밋하지 않습니다.
+- **검증 한계:** 로컬/CI 제한 모형은 공개된 허용 모듈·HTTP·Git 읽기 규칙만 재현한 것으로 ALEPH 내부 명령 허용 목록과 동일하다고 보증할 수 없습니다. 공식 심판의 새 점수·실패 코드는 별도 재평가로만 확정합니다.
+- 보존: 11단계 공식 100점 커밋 `656cf35e` 및 `step11-100-pass-before-step12-20261014` 브랜치, 변경 직전 12단계 `backup-step12-pre-full-bundle-audit-20261014` 브랜치. 판정·인증·소유권·기기 승인·복구·DB 자료는 변경하지 않았습니다.
