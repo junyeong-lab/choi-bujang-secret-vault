@@ -1,3 +1,4 @@
+import {requireApprovedDevice} from '../../../src/device-approval.mjs';
 // Stage 10: judge-provided private backup route.
 // No request body selectors are accepted. Authorization selects the owner,
 // and the path selects exactly one memo. All material stays server-side.
@@ -84,6 +85,7 @@ export default async function handler(req,res) {
     verify??=createLoginVerifier({config,supabaseSecretKey:secret});
     const identity=await verify(authorization);
     if(!identity)return reply(401,{error:'unauthorized'});
+    if (!await requireApprovedDevice(req,res,identity,{origin:process.env.SUPABASE_URL,secret})) return;
     const result=await runStep10Restore({
       id:req.query?.id,identity,authorization,body:req.body,
       secret,supabaseOrigin:process.env.SUPABASE_URL
