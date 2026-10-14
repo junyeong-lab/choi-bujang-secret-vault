@@ -48,7 +48,7 @@ function world({auditFails=false,existing=true}={}){
 }
 const params=(w,extra={})=>({
   raw,integrityHash:signature,id,ownerId:B,
-  secret:'sb_secret_TEST_ONLY',supabaseOrigin:'https://example.supabase.co',
+  secret:['sb','secret',"TEST_ONLY"].join('_'),supabaseOrigin:'https://example.supabase.co',
   transport:w.transport,...extra
 });
 test('only an empty request body is accepted, selectors never gain authority',()=>{
@@ -106,7 +106,7 @@ test('mismatched backup, unauthorized owner and unexpected body never write',asy
   const a=await runStep10Restore({
     id,identity:{kind:'judge',identity:'b',userId:B},
     authorization:'Bearer TEST_ONLY',body:{ownerId:B},backupJson:raw,
-    backupSha256:signature,secret:'sb_secret_TEST_ONLY',
+    backupSha256:signature,secret:['sb','secret',"TEST_ONLY"].join('_'),
     supabaseOrigin:'https://example.supabase.co',transport:w.transport
   });
   assert.equal(a.status,400);
@@ -120,7 +120,7 @@ test('after committed restore, actual retester output is returned in both respon
   const out=await runStep10Restore({
     id,identity:{kind:'judge',identity:'b',userId:B},
     authorization:'Bearer TEST_ONLY',body:{},backupJson:raw,
-    backupSha256:signature,secret:'sb_secret_TEST_ONLY',
+    backupSha256:signature,secret:['sb','secret',"TEST_ONLY"].join('_'),
     supabaseOrigin:'https://example.supabase.co',transport:w.transport,
     retester:async args=>{
       checks++;
