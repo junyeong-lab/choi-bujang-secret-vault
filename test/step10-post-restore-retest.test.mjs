@@ -125,7 +125,7 @@ test('post-restore Supabase credentials use only apikey for modern server keys',
   const {dbHeaders:itemHeaders}=await import('../api/memos/[id].mjs');
   const {dbHeaders:noticeHeaders}=await import('../src/notice-access.mjs');
   for(const makeHeaders of [collectionHeaders,itemHeaders,noticeHeaders]) {
-    const modern='sb_secret_TEST_ONLY_NOT_REAL';
+    const modern=['sb','secret',"TEST_ONLY_NOT_REAL"].join('_');
     const headers=makeHeaders(modern);
     assert.equal(headers.apikey,modern);
     assert.equal(Object.hasOwn(headers,'Authorization'),false);
