@@ -1,3 +1,4 @@
+import {requireApprovedDevice} from '../src/device-approval.mjs';
 import { randomUUID } from 'node:crypto';
 import { authenticateNotice, dbHeaders, instructorAllowed, safeResponseHeaders, validWriteOrigin,
   jsonInput, validNotice, presentNotice } from '../src/notice-access.mjs';
@@ -7,6 +8,7 @@ export default async function handler(req, res) {
   if (!['GET', 'POST'].includes(req.method)) return res.status(405).json({ error: 'method_not_allowed' });
   const state = await authenticateNotice(req, res);
   if (!state) return;
+  if (!await requireApprovedDevice(req,res,state.identity,{origin:process.env.SUPABASE_URL,secret:state.secret})) return;
   if (req.method === 'POST' && !validWriteOrigin(req)) return res.status(403).json({ error: 'invalid_origin' });
   const endpoint = new URL('/rest/v1/instructor_notices', state.origin);
   try {
