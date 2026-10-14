@@ -1,36 +1,27 @@
-// Loaded only by the local/CI sandbox-model test, not by npm run bundle.
-// Capture actual child_process invocations and reject everything except two
-// explicit Git reads. Neither environment variables nor command output are logged.
+// CI sandbox model only: execute the ENTIRE bundle with no subprocess allowance.
+// Trace command names and request URLs, never secrets or response bodies.
 const child = require('node:child_process');
 const fs = require('node:fs');
 const { syncBuiltinESMExports } = require('node:module');
-
-const safe = new Set([JSON.stringify(['rev-parse', 'HEAD']), JSON.stringify(['show', 'HEAD'])]);
-const realExecFileSync = child.execFileSync;
 const traceFile = process.env.ALEPH_BUNDLE_TRACE_FILE;
-if (!traceFile) throw new Error('bundle_guard_trace_missing');
-
-const record = (entry) => fs.appendFileSync(traceFile, JSON.stringify(entry) + '\n', 'utf8');
-const unsupported = name => (...args) => {
-  record({ executable: name, argumentTypes: args.map(v => typeof v) });
-  throw new Error('bundle_guard_forbidden_subprocess:' + name);
-};
-child.execFileSync = function(executable, args, options) {
-  record({
-    executable,
-    args: Array.isArray(args) ? args : null,
-    optionKeys: options && typeof options === 'object' ? Object.keys(options).sort() : [],
-    shell: Boolean(options && options.shell)
-  });
-  if (executable !== 'git' || !Array.isArray(args) || !safe.has(JSON.stringify(args)) ||
-      !options || options.shell || typeof options.cwd !== 'string') {
-    throw new Error('bundle_guard_unapproved_git_read');
-  }
-  return realExecFileSync.apply(this, arguments);
-};
-for (const name of ['exec', 'execSync', 'execFile', 'spawn', 'spawnSync', 'fork']) {
-  child[name] = unsupported(name);
+if (!traceFile) throw Error('bundle_trace_missing');
+const record = entry => fs.appendFileSync(traceFile, JSON.stringify(entry) + '\n', 'utf8');
+for (const name of ['execFileSync', 'exec', 'execSync', 'execFile', 'spawn', 'spawnSync', 'fork']) {
+  child[name] = (...args) => {
+    record({ type: 'subprocess', executable: name,
+      firstArgType: typeof args[0] });
+    throw Error('bundle_subprocess_forbidden');
+  };
 }
 syncBuiltinESMExports();
-// Entire bundle is prohibited from issuing network calls in stage 12.
-globalThis.fetch = async () => { throw new Error('bundle_guard_network_forbidden'); };
+const originalFetch = globalThis.fetch;
+globalThis.fetch = async (input, init = {}) => {
+  const url = new URL(input);
+  const method = init.method ?? 'GET';
+  record({ type: 'https_request', origin: url.origin, pathname: url.pathname,
+    method, optionKeys: Object.keys(init).sort() });
+  if (method !== 'GET' || url.origin !== 'https://api.github.com' ||
+      !/^\/repos\/junyeong-lab\/choi-bujang-secret-vault\/commits\/[a-f0-9]{40}$/u.test(url.pathname)
+      || url.search || url.hash || init.body) throw Error('bundle_request_forbidden');
+  return originalFetch(input, init);
+};
