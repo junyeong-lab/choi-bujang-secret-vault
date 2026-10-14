@@ -168,6 +168,8 @@ async function authRequest(path, options = {}) {
     }
 
 async function requestMemo(path, options = {}) {
+  if(!deviceApproved||navigator.onLine===false)
+    throw new Error('온라인에서 서버 기기 승인부터 다시 확인해 주세요.');
   const response = await fetch(path, {
     ...options,
     cache: 'no-store',
@@ -348,11 +350,18 @@ async function restoreSession() {
 
 // The browser does not generate or persist device key material. The server
 // issues an opaque HttpOnly handle and independently checks its approval.
-async function refreshDeviceStatus() {
+// Rechecks, network loss and logout must also clear editable note contents.
+function clearProtectedUi() {
   deviceApproved=false;
   memoPanel.hidden=true;
   ++latestLoad;
   currentNotes=[];
+  list.replaceChildren();
+  resetEditor();
+  memoMessage.textContent='';
+}
+async function refreshDeviceStatus() {
+  clearProtectedUi();
   showNotes('서버 승인 전에는 보호 자료를 열 수 없습니다.');
   if(!authenticatedUser)return;
   try {
@@ -364,7 +373,9 @@ async function refreshDeviceStatus() {
       approved:'서버 기기 승인: 확인 완료 (보호 자료 접근 허용)',
       pending:'서버 기기 승인: 관리자 승인 대기 중',
       unregistered:'서버 기기 승인: 미등록 (요청 필요)',
-      revoked:'서버 기기 승인: 승인 해제 (접근 차단)'
+      revoked:'서버 기기 승인: 승인 해제 (접근 차단)',
+      expired:'서버 기기 승인: 만료 (접근 차단)',
+      verification_failed:'서버 기기 승인: 승인 시각 검증 실패 (접근 차단)'
     }[data.status]||'서버 기기 승인: 확인 불가';
     deviceRegister.hidden=data.status!=='unregistered';
     deviceVerify.hidden=true;
@@ -374,8 +385,7 @@ async function refreshDeviceStatus() {
       : '서버 승인 전에는 보호 메모를 표시하거나 요청하지 않습니다.';
     if(deviceApproved)await loadNotes(true);
   }catch{
-    deviceApproved=false;
-    memoPanel.hidden=true;
+    clearProtectedUi();
     deviceApprovalStatus.textContent='서버 기기 승인: 확인 실패 (접근 차단)';
     deviceMessage.textContent='서버에 연결하여 승인 상태를 확인해 주세요.';
   }
@@ -411,8 +421,12 @@ function updateInstallStatus() {
     : '실행 형태: 웹브라우저 (지원되는 환경에서는 홈 화면에 추가할 수 있습니다)';
 }
 function updateNetworkStatus() {
+  if(navigator.onLine===false){
+    clearProtectedUi();
+    deviceApprovalStatus.textContent='서버 기기 승인: 오프라인 (접근 차단)';
+  }
   networkStatus.textContent = navigator.onLine === false
-    ? '오프라인 감지: 서버 승인 확인과 보호 자료 이용이 불가능합니다.'
+    ? '오프라인 감지: 보호 자료를 비웠습니다. 다시 연결해 서버 승인을 확인해 주세요.'
     : '네트워크 연결 상태: 서버 요청으로 확인합니다. 보호 자료는 오프라인 저장하지 않습니다.';
 }
 window.addEventListener('online', updateNetworkStatus);
