@@ -527,7 +527,7 @@ node --test test/step10-policy-diff.test.mjs
 - 백업과 복원 API는 운영에 공개할 필요가 있을 때만 사용하는 보호 경로이며, 개인키·메모 본문은 GitHub/Actions/제출 묶음에 기록하지 않습니다.
 
 ### 10단계 저장점 및 제출
-- `aleph.config.json`: `step=10`, `restoreRoute=POST /api/restore/memo`. 기존 `judgeIssuer`, 로그인 발급자, 원본 API URL, 기존 허용 경로는 유지합니다.
+- 과거 구현 이력: 당시 `restoreRoute=POST /api/restore/memo`였고, 2026-10-14 현재 복원 경로를 전환했습니다. 최신 경로는 아래 현재 구현 절과 설정 파일을 참조합니다.
 - GitHub Actions `Step 10 backup recovery validation and submission`은 각 테스트와 `npm run bundle`을 실행하고 `step10-submission`이라는 결과물을 생성합니다.
 - 공식 심판의 복구 성공 여부는 **미확인**이며, 학생 자체 테스트와 구분합니다.
 
@@ -573,3 +573,15 @@ node --test test/step10-policy-diff.test.mjs
 - `step10_restore_one_memo` 미리보기는 본문 해시뿐 아니라 제목만 바뀐 경우도 변경 대상으로 표시하도록 보완했습니다. 실제 복원은 기존 ID·소유권·사본 해시·현재 해시 검증을 그대로 적용합니다.
 - 운영 DB에서 **격리된 합성 메모**를 생성해 최초 사본 확보, 제목만 변경, 내용 변경, 단건 복원, 다른 소유자의 백업 조회 거부를 검증했습니다. 합성 메모·감사 기록은 한 트랜잭션의 롤백으로 제거했습니다.
 - 검증 후 기존 메모 5건, 사본 1건, 복원 감사 0건이 유지됐습니다. 자동 백업 트리거 2개가 활성화돼 있습니다. 이 기록은 **DB 수준 시험**이며 실제 ALEPH 심판 통과 또는 심판 요청의 복원 성공을 의미하지 않습니다.
+
+
+## 10단계 현재 구현 — 환경 변수 비공개 백업 호환 (2026-10-14)
+
+- 현재 복원 경로: `POST /api/restore/notes/:id`; `api/restore/notes/[id].mjs`. 과거 `POST /api/restore/memo`는 복구 가능한 구버전 API로 유지합니다.
+- 빈 요청 본문만 허용하며, 복원 ID는 URL에서, 소유자는 검증된 JWT sub에서 결정합니다. body의 role/owner/content 선택자는 400입니다.
+- 실행 환경에 `RESTORE_NOTE_BACKUP_JSON` 및 `RESTORE_NOTE_BACKUP_SHA256`이 제공되면 JSON 전체 SHA-256과 내부 메모 해시를 다시 확인합니다. 반쪽 설정 또는 불일치는 실패로 처리하며 비밀값을 출력하거나 커밋하지 않습니다.
+- 환경 변수 두 개가 모두 없다면 검증된 심판 B에 한해 기존 Supabase 단건 복원 RPC로 대체합니다. 그 외에는 백업 부재로 중단합니다.
+- 환경 변수 복원에는 기존 `step10_restore_audit`의 불변 기록에 실제 `started`를 먼저 덧붙이고, 대상 1건의 복원과 readback 검증 뒤에만 `restored`를 추가합니다. 감사 기록 실패는 복원 성공으로 처리하지 않습니다.
+- 복원 후 실제 HTTP 정상/금지 요청 4개와 정책·탐지 검사 6개를 실행하여 결과를 `postRestoreRetest`와 `restore.retests`에 기록합니다. 미실행/실패를 성공으로 표시하지 않습니다.
+- 이전 기준 커밋 `30684df933b9fd5be106a185d6dbfd44dcebf394`, 보존 브랜치 `step10-pre-env-restore-20261014`.
+- 격리 환경 변수명과 JSON 구조는 합격 후기에서 가져온 호환성 가설이며 공식 공개 명세로 확인되지 않았습니다. 자동 테스트의 모의 통과는 ALEPH 공식 합격이나 운영 DB 실제 복원을 증명하지 않습니다.
