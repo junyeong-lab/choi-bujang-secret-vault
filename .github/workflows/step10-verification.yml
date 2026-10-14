@@ -1,4 +1,4 @@
-name: Step 10 backup recovery validation and submission
+name: Step 11 verified-device app and regression submission
 
 on:
   push:
@@ -23,6 +23,8 @@ jobs:
           node-version: '22'
           cache: npm
       - run: npm ci
+      - name: Verify a clean npm install
+        run: npm install --no-audit --no-fund
       - name: Verify backup and comparison with unchanged policy
         run: npm run policy:diff
       - name: Verify test-only altered policy scope before restoration
@@ -54,15 +56,15 @@ jobs:
         run: node --test test/xdr-run.test.mjs
       - name: Prepare excluded submission notes
         run: |
-          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"10단계: 정책 사본과 B 가상 메모 1건의 복구 기능 검증. S10_RETEST_MISSING 보완: 복원 성공 직후 소유자 정상 단건 조회·타인 메모 접근 거부·비로그인 목록 거부·일반 사용자 공지 쓰기 거부를 실제 API로 재요청하고, 6~9단계 정책·탐지 함수도 재실행하여 상태를 응답합니다. 운영 메모 변형 및 복원 직접 시험은 미실행이며 실제 심판에서 평가합니다.",blockedAt:null},null,2)+"\n","utf8")'
+          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"11단계: PWA manifest·아이콘·공개 오프라인 안내, 기기 등록 요청과 WebAuthn 서명 확인, 관리자 승인 전 보호 자료 API 거부, 승인 후 검증된 단기 HttpOnly 세션으로 접근합니다. 실제 브라우저 등록·관리자 승인·실제 운영 단말기 접속은 아직 실행하지 않았으며 모의 기기 서명·가짜 세션으로 접근 통제를 테스트했습니다. 10단계 통과 복원 경로와 1~9단계 규칙을 보존했습니다.",blockedAt:null},null,2)+"\n","utf8")'
       - name: Build submission bundle using live anonymous checks
         run: npm run bundle
-      - name: Check step 10 bundle contents
+      - name: Check step 11 bundle contents
         run: |
-          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==10||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==4)process.exit(1);console.log("STEP10",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==11||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==4)process.exit(1);console.log("STEP11",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
       - name: Archive submission JSON
         uses: actions/upload-artifact@v4
         with:
-          name: step10-submission
+          name: step11-submission
           path: artifacts/submission.json
           if-no-files-found: error
