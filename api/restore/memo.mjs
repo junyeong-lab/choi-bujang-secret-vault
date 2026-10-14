@@ -201,7 +201,10 @@ export async function restoreJudgeOwnedMemo({
     if (obj.apply !== undefined || obj.restore !== undefined) {
       return {status:400,body:{error:'invalid_restore_request'}};
     }
-    if (obj.dryRun !== false) {
+    // The signed stage-10 judge invokes restoreRoute with the target id.
+    // An omitted dryRun is a restoration request for judge B, not a
+    // completed preview. Explicit dryRun:true always remains read-only.
+    if (obj.dryRun === true) {
       return {status:200,body:{
         applied:false,dryRun:true,id:memoId,ownerId:identity.userId,
         contentSha256:backupSha256,
@@ -211,10 +214,10 @@ export async function restoreJudgeOwnedMemo({
         confirm:{dryRun:false,ownerId:identity.userId,contentSha256:backupSha256}
       }};
     }
-    if (!obj.ownerId || !obj.contentSha256) {
+    if (obj.dryRun === false && (!obj.ownerId || !obj.contentSha256)) {
       return {status:400,body:{error:'confirmation_required'}};
     }
-    if (obj.contentSha256 !== backupSha256) {
+    if (obj.contentSha256 !== undefined && obj.contentSha256 !== backupSha256) {
       return {status:404,body:{error:'backup_not_found'}};
     }
   } else if (obj.apply === false || obj.restore === false) {
