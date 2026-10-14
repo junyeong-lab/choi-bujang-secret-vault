@@ -16,6 +16,10 @@
   ],
   "rewrites": [
     {
+      "source": "/api/ops",
+      "destination": "/api/ai?__ops=step12"
+    },
+    {
       "source": "/api/restore",
       "destination": "/api/restore/memo"
     }
