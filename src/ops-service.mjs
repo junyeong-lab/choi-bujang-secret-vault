@@ -39,9 +39,13 @@ async function optionalDb(db,table,params){
 }
 export function buildOpsView({logs=[],snapshots=null,audits=null,devices=null,now=new Date().toISOString()}={}){
   const latest=new Map();
-  // DB query orders descending. Never trust duplicates as extra kinds of attack.
+  const knownIds=new Set(OPS_CHECKS.map(item=>item.attackId));
+  // DB query orders descending. Show only the latest real observation for
+  // each known check, so summary numbers match the visible redacted log rows.
+  // Older append-only rows remain in Supabase for history.
   for(const record of logs){
-    if(!latest.has(record.attack_id))latest.set(record.attack_id,record);
+    if(knownIds.has(record.attack_id)&&!latest.has(record.attack_id))
+      latest.set(record.attack_id,record);
   }
   const checks=OPS_CHECKS.map(item=>{
     const e=latest.get(item.attackId);
@@ -55,7 +59,7 @@ export function buildOpsView({logs=[],snapshots=null,audits=null,devices=null,no
   const matched=checks.filter(x=>x.status==='matched').length;
   const mismatched=checks.filter(x=>x.status==='mismatched').length;
   const notRun=checks.length-matched-mismatched;
-  const safeLogs=logs.map(e=>({
+  const safeLogs=[...latest.values()].map(e=>({
     attackId:e.attack_id,method:e.method,path:e.path,
     expected:e.expected,observedHttp:e.observed_http,
     status:e.outcome,requestId:e.request_id,checkedAt:e.checked_at,
