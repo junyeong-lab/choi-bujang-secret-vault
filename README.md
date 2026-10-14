@@ -714,3 +714,13 @@ node --test test/step10-policy-diff.test.mjs
 - 검증 순서: 깨끗한 Git 체크아웃에서 `npm ci`, `npm install`, 기존 1~11단계 회귀 테스트, `node --test test/step12-bundle-end-to-end.test.mjs`, `npm run bundle`입니다. `bundle-notes.json`은 비밀값 없는 임시 입력으로 만들며 `artifacts/submission.json`과 함께 커밋하지 않습니다.
 - **검증 한계:** 로컬/CI 제한 모형은 공개된 허용 모듈·HTTP·Git 읽기 규칙만 재현한 것으로 ALEPH 내부 명령 허용 목록과 동일하다고 보증할 수 없습니다. 공식 심판의 새 점수·실패 코드는 별도 재평가로만 확정합니다.
 - 보존: 11단계 공식 100점 커밋 `656cf35e` 및 `step11-100-pass-before-step12-20261014` 브랜치, 변경 직전 12단계 `backup-step12-pre-full-bundle-audit-20261014` 브랜치. 판정·인증·소유권·기기 승인·복구·DB 자료는 변경하지 않았습니다.
+
+
+### 12단계 S12_BUNDLE_UNSUPPORTED 추가 수정 — child_process 0건 (2026-10-14)
+
+- 실패 증거: 공식 평가 커밋 1a035162873e에서 여전히 S12_BUNDLE_UNSUPPORTED, 0/100. 기존 fs+Git 읽기 2회 방식도 심판에서 차단됨. 허용된 Git 명령의 세부 인자 계약은 확인되지 않았음.
+- 다른 판정·인증·소유자·기기 승인·복구 기능은 바꾸지 않고 scripts/bundle.mjs의 node:child_process 의존 및 subprocess 호출을 완전히 제거.
+- 실제 Git HEAD는 체크아웃 .git/HEAD가 가리키는 SHA(브랜치 refs 또는 packed-refs 포함)를 node:fs로 읽음. 변경 파일은 검증된 해당 SHA의 공개 GitHub commits API HTTPS GET 응답 파일 목록을 사용; GitHub 응답 SHA와 실제 HEAD가 다르면 제출 중단. SHA/파일을 하드코딩하지 않음.
+- 승인된 네트워크 호출은 HTTPS GET 1건(공개 커밋 파일 목록 조회)이며, 출처와 응답 SHA를 검증함. 보안 자료·토큰·환경변수·메모 본문 전송 또는 출력 없음. 기존 src/attack-check.mjs의 12단계 18개 not_run 및 별도 /ops.html 실측 기록은 보존.
+- 전체 번들 엔트리포인트를 별도 Node에서 실행하는 test/step12-bundle-end-to-end.test.mjs 및 test/helpers/bundle-command-guard.cjs에서 모든 자식 프로세스를 금지하고 허용된 단일 GitHub GET만 남았는지 검증. 생성된 제출 JSON의 commit과 changedFiles를 실제 git 기록과 대조. 일반 npm install 및 이전 단계 회귀 테스트도 CI에서 수행.
+- 재평가 전에는 공식 12단계 통과를 주장하지 않음. 실패가 다시 발생하면 동일 코드가 아닌 다음 심판 오류를 우선 조사.
