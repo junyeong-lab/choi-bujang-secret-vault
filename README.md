@@ -600,7 +600,7 @@ node --test test/step10-policy-diff.test.mjs
 ### 제작 2 — 실제 승인 전 자료 차단
 - 로그인 후 `GET /api/device`로 상태 확인. 미등록·대기·검증 필요·승인 상태를 화면에서 구분합니다.
 - `POST /api/device`의 `register-options` → 브라우저 WebAuthn `navigator.credentials.create()` → `register-finish`은 서버에 **pending** 자격 증명만 등록합니다. 등록 버튼은 절대로 승인하지 않습니다.
-- 별도 신뢰 관리자/교사가 `public.step11_device_credentials`에서 요청자·사용 기기를 대면 확인한 뒤 `status='approved'`로 승인을 부여해야 합니다. 해당 권한은 공개 API·브라우저에 없습니다. 실제 운영 승인 절차는 관리자 확인 전까지 미실행입니다.
+- 별도 신뢰 관리자/교사가 `public.step11_device_credentials`에서 요청자·사용 기기를 대면 확인한 뒤 `status='approved'`로 승인을 부여해야 합니다. 해당 권한은 공개 API·브라우저에 없습니다. 2026-10-14 실제 브라우저 등록 요청 후 본인으로부터 사용 기기임을 확인받고, 관리자 권한으로 해당 대기 기기 1건을 별도 승인했습니다. 일반 사용자나 등록 버튼은 승인 권한이 없습니다.
 - 승인된 뒤 `verify-options` → `navigator.credentials.get()` → `verify-finish`이 5분짜리 일회용 서버 챌린지, RP ID, 정확한 출처, authenticator 서명 및 사용자 확인을 검증합니다. 그 후에만 서버가 15분 기기 확인 세션을 발행합니다. 기기 개인키는 WebAuthn 인증기에서 관리하고 앱 JavaScript·localStorage·sessionStorage·IndexedDB에는 저장하지 않습니다. 확인 세션은 서버에 SHA-256으로 저장하며 브라우저에는 HttpOnly Secure SameSite=Strict 쿠키만 설정합니다.
 - 메모 목록/상세/추가/수정/삭제, 공지 읽기/쓰기에 **서버 미확인 기기는 403**을 반환합니다. 단순 로그인이나 PWA 설치는 접근 권한이 아닙니다. 기존 ALEPH 1~10단계의 서명 검증된 judge 요청 경로는 별도로 유지합니다.
 - 서버 DB 구조: `supabase/step11-devices.sql`, `step11_device_credentials`, `step11_device_challenges`, `step11_device_sessions`. 익명·일반 사용자 직접 테이블 접근을 차단하고, 승인·취소 권한은 관리자에만 둡니다.
@@ -610,4 +610,15 @@ node --test test/step10-policy-diff.test.mjs
 - `node --test test/step11-pwa-shell.test.mjs test/step11-device-approval.test.mjs`: PWA 형식, 기기 상태 UI, 진짜 테스트 서명 검증, 위조 쿠키 거부, 관리자 승인 전·후 DB 가상 응답 확인.
 - GitHub Actions에서 `npm ci`, `npm install`, 1~10단계 회귀 검사, `npm run bundle`을 실행합니다. 이는 모의 서명과 가짜 DB를 포함하는 자동 검사이며 실제 사용자의 물리 기기 승인이나 ALEPH 심판의 11단계 통과를 뜻하지 않습니다.
 - 직접 확인할 증빙: 등록 버튼 뒤 `pending`과 메모 비표시, 비승인 API `403`; 신뢰 관리자 승인 뒤 WebAuthn 재확인 및 실제 메모 `200` (동일 계정으로만), 타 소유자 접근 거부.
-- 관리자 대면 확인이나 실제 운영 기기 등록을 수행하기 전에는 `approved`를 임의로 만들지 않습니다. 토큰, 비밀번호, 자격 증명 개인키, 메모 내용은 공개 저장소나 제출 묶음에 넣지 않습니다.
+- 실제 기기 등록 요청 후 본인의 명시적 사용 기기 확인을 받고 관리자가 해당 1건만 승인했습니다. 이 사례는 사용자 확인 기반 승인으로, 회사 관리 단말기·하드웨어 attestation 확인을 뜻하지 않습니다. 토큰, 비밀번호, 자격 증명 개인키, 메모 내용은 공개 저장소나 제출 묶음에 넣지 않습니다.
+
+
+### 11단계 최종 확인 및 저장점 (2026-10-14)
+
+- 실제 브라우저에서 기기 등록 요청 뒤 `pending` 상태와 자료 차단 화면을 확인했습니다. 기기 인증 정보는 서버 DB에 1건만 생성됐고 등록 버튼 자체로 승인되지 않았습니다.
+- 사용자가 현재 사용하는 신뢰 기기임을 확인한 뒤 해당 대기 건만 별도로 `approved` 처리했습니다. 이어 WebAuthn 패스키로 재확인하여 메모 목록을 표시하는 실제 앱 화면을 확인했습니다. 원본 메모 5건을 그대로 유지했습니다.
+- Supabase 재점검: 승인된 기기 자격 1건, 재확인 이후 유효한 기기 세션 1건, 기존 메모 5건, 10단계 백업 1건. 세션은 15분 만료되므로 이 수치는 당시 확인 시점의 결과입니다.
+- `node --test test/step11-device-approval.test.mjs`은 로그인만 완료된 기기의 `403 device_not_approved`, 위조 기기 쿠키 거부, 서버 승인 자격 증명+실제 서명 검증을 **모의 환경에서** 확인합니다. 미승인 브라우저에서 보호 API의 실제 HTTP 403 응답은 별도로 실측하지 않았습니다.
+- [GitHub Actions 검증](https://github.com/junyeong-lab/choi-bujang-secret-vault/actions/runs/38499152894): `npm ci`, `npm install`, PWA, WebAuthn, 1~10단계 회귀 테스트, `npm run bundle` 모두 성공. `step11-submission` 아티팩트에 제출 JSON 보관; `bundle-notes.json`와 `artifacts/submission.json`은 Git에서 제외했습니다.
+- `aleph.config.json`의 `step:11`, 실제 배포 주소, Auth 발급자와 허용 경로를 유지합니다. 기존 판정기는 `docs/DECIDER_REQUEST.md`의 이름만 읽고, 각 규칙 ID는 `RULE_IDS`에 정의되어 있습니다.
+- 다시 확인: 웹앱 로그인 → 기기 승인 상태 새로고침 → 승인된 기기 확인(패스키) → 본인 메모 표시. 새 미확인 브라우저에서는 로그인만 하고 인증 전 `GET /api/memos`가 403인지 확인합니다. 브라우저 저장소에 개인키/토큰을 직접 기록하지 않습니다.
