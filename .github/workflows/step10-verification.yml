@@ -45,6 +45,8 @@ jobs:
         run: node --test test/step11-device-approval.test.mjs
       - name: 11 key non-exposure and server-side device handle approval
         run: node --test test/step11-no-device-token-exposure.test.mjs
+      - name: 11 approved-at, expiry, offline and recheck fail-closed regression
+        run: node --test test/step11-approval-lifecycle.test.mjs
       - name: 6-8 device, anomaly, resource-zone policy regression
         run: |
           npm run decider:test
