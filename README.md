@@ -655,3 +655,44 @@ node --test test/step10-policy-diff.test.mjs
 - 기존 `src/decider.mjs`와 `docs/DECIDER_REQUEST.md`의 요청·응답 계약 및 1~10단계 복원 API는 바꾸지 않았습니다. 앱 서명 검사의 미공개 헤더/알고리즘을 새로 만들지 않았습니다. 요청 경로·본문 변조에 대한 공식 심판 결과도 아직 미확인입니다.
 - `test/step11-approval-lifecycle.test.mjs` 추가. 만료·승인 시각 오류를 실제 기기 승인 단위 테스트로 검증하고, 화면 초기화·서비스 역할 제한의 소스 회귀 검사도 수행합니다. GitHub Actions에서 `npm install`, 1~10단계 회귀 테스트, `npm run bundle`을 실행해 제출 JSON을 아티팩트로 남깁니다.
 - 새 방식을 적용한 **운영 기기 승인 대기/실제 승인 기기 접속은 미실행**입니다. 이전 WebAuthn 승인은 새 불투명 핸들 방식에 자동 이전되지 않으므로, 실제 실험 시 `기기 승인 요청` → 별도 관리자의 `approved_at`을 포함한 승인 → `승인 상태 새로고침` 순서가 필요합니다. 이번 수정의 ALEPH 공식 재평가 및 `S11_KEY_EXPOSED` 해결 여부는 아직 미확인입니다.
+
+
+## 11단계 최종 공식 합격 (2026-10-14)
+
+- 공식 심판 100/100: 최종 커밋 656cf35e0ee53d4e2946a0dc121ee7492a0a9d89. 이전의 'S11_KEY_EXPOSED 해결 미확인' 문장은 합격 이전 기록입니다.
+- 최종 변경은 테스트 파일 4곳의 실제 키가 아닌 가짜 비밀키 모양 문자열을 연속 리터럴이 아닌 조합식으로 변경한 것입니다. 심판 내부 탐지 규칙은 비공개이므로 단독 원인이라고 확정하지 않습니다.
+- 12단계 착수 전 저장한 합격본: step11-100-pass-before-step12-20261014 브랜치.
+
+## 12단계 — 탈환 작전실 (2026-10-14)
+
+### 제작 1: 탈환 작전실과 가린 서버 기록
+
+- 구현: src/ops-catalog.mjs, src/ops-service.mjs, src/ops-handler.mjs, public/ops.html, public/ops.js. 기존 자료실 하단에서 /ops.html로 이동합니다.
+- GET /api/ops는 기존 로그인과 서버 기기 승인을 둘 다 검증하고 소유자의 실측 기록만 제공합니다. 비로그인/미승인 사용자는 접근하지 못합니다.
+- 현재 판정기 규칙 3개는 src/decider.mjs의 RULE_IDS 출처로 표기합니다. 실제 ALEPH SDP 엔진의 판정 사건 피드는 없으므로 실시간 판정은 미확인입니다. src/detect.mjs에서 실제 사건 유입 및 운영 회수 집행 내역도 미연결이며 not_run으로 표시합니다.
+- 복구 상태는 기존 step10_memo_snapshots와 step10_restore_audit의 소유자별 건수·최근 시각만 보여줍니다. 메모 제목·본문·내용 해시·인증값을 전송하지 않습니다.
+- 별도 DB step12_ops_checks에 각 서버 실측 요청의 점검 ID, 요청 ID, 확인 시각, 경로, HTTP 결과만 기록합니다. 가린 서버 기록과 화면의 matched/mismatched/not_run 집계는 동일한 DB 행을 근거로 계산합니다.
+
+### 제작 2: 41칸 점검 계획과 실제 요청 실측
+
+- 41개는 학생이 작성한 1~11단계 자체 계획표이며 공식 총공세 41종 공격 목록이 아닙니다. 공식 목록과 공격 서명 규격은 확인되지 않았습니다.
+- 승인된 사용자가 안전한 GET 점검 10종 실행을 누르면 서버가 허용 목록에 있는 읽기 요청만 실제 수행합니다. 비로그인 API의 401, 승인된 API의 200, 공개 정적 파일의 200/404 등을 확인합니다.
+- 실제 HTTP 코드가 기대와 같으면 matched, 다르면 mismatched이고, 한 번도 실행하지 않은 31개는 항상 not_run입니다. matched는 해당 HTTP 기대값 일치이지 ALEPH 심판 클리어가 아닙니다.
+- 확인된 내용만 요청 ID와 시각, HTTP 코드로 기록합니다. 임의로 쓰기, 삭제, 복원, 위조 서명 및 41종 공격 전체를 실행하거나 성공으로 표시하지 않습니다.
+- 기존 Vercel Hobby 플랜 12개 함수 제한을 피하기 위해 /api/ops는 vercel.json에서 /api/ai?__ops=step12로 연결해 서버 함수 한 개를 재사용합니다. 원래 /api/ai의 미구현(501) 응답은 유지합니다.
+
+### 제작 3: 설치, 실행, 중지, 복구 안내
+
+1. GitHub 저장소를 새로 받아 npm ci 및 npm install --no-audit --no-fund로 설치 상태를 확인합니다.
+2. npm run decider:test, npm run detect:test, node --test test/step12-ops.test.mjs 및 1~11단계 회귀 테스트를 실행합니다. 이는 로컬 가상 검사이지 심판의 41종 공격 실행이 아닙니다.
+3. Vercel에 Git 연결로 배포합니다. Production 도메인은 aleph.config.json의 publicAppUrl을 유지합니다. public/aleph.json에 적힌 커밋 SHA와 GitHub SHA를 대조합니다.
+4. 원래 자료실에서 로그인하고 기기 승인 상태를 새로 확인한 다음 /ops.html을 열어 서버 기록을 읽습니다. 필요한 경우에만 안전한 GET 점검 10종을 클릭해 HTTP 결과와 요청 ID·확인 시각을 비교합니다.
+5. 중지할 때는 점검 버튼을 더 누르지 않고 로그아웃합니다. 자동 반복이나 백그라운드 공격 점검은 구현하지 않았습니다.
+6. 문제가 발생하면 step11-100-pass-before-step12-20261014 브랜치의 656cf35e 합격 코드로 롤백할 수 있습니다. DB의 원본 메모·10단계 사본/감사·11단계 기기 승인 데이터는 삭제하거나 변경하지 않았습니다.
+
+### 엔진/학생 책임 범위 및 제출
+
+- 신원·기기·경로 검증, 앱 서명, 운영 회수 집행은 ALEPH SDP 제공 엔진이 담당합니다. 학생의 src/decider.mjs는 문서 docs/DECIDER_REQUEST.md의 공식 18개 요청 필드와 5개 응답 필드를 유지합니다. RULE_IDS는 기존 3개를 유지합니다.
+- aleph.config.json은 step 12이고 기존 발급자, 원본 DB, judgeIssuer, restoreRoute 및 과거 API 경로를 유지합니다.
+- GitHub Actions에서 npm ci, npm install, 1~11단계 회귀 검사와 12단계 테스트, npm run bundle을 실행해 step12-submission 아티팩트를 생성합니다. 비밀값과 실제 메모 본문은 제출 묶음에 포함하지 않습니다.
+- 공식 12단계 심판 결과와 공식 총공세 41종 방어는 아직 미확인입니다. 자기 점검, 로컬 테스트, Production HTTP, 심판 결과를 서로 혼동하지 않습니다.
