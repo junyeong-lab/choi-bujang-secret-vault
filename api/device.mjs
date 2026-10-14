@@ -58,11 +58,9 @@ export default async function handler(req,res){
       const result=await verifyOptions({identity,db});
       return res.status(200).json(result);
     }
-    const result=await verifyFinish({identity,db,appOrigin:config.publicAppUrl,body:input});
-    if(result.cookie){
-      res.setHeader('Set-Cookie',result.cookie);
-      delete result.cookie;
-    }
+    const result=await verifyFinish({req,identity,db,appOrigin:config.publicAppUrl,body:input});
+    // Device verification is bound server-side to the existing login session.
+    // Never return/set an additional browser-held device token.
     return res.status(200).json(result);
   }catch(error){
     if(['invalid_challenge','invalid_credential','wrong_rp_id',
