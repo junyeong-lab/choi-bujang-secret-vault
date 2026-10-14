@@ -339,7 +339,7 @@ export async function attachPostRestoreRetests({
   let retests;
   try {
     retests = await retester({
-      authorization, memoId, expectedContentHash:restoreResult.body.contentSha256,
+      authorization, memoId, expectedContentHash:restoreResult.body.bodySha256 ?? restoreResult.body.contentSha256,
       publicAppUrl
     });
     if (!retests || !['passed','failed'].includes(retests.status) ||
