@@ -37,6 +37,8 @@ jobs:
         run: node --test test/step10-deployment-identity.test.mjs
       - name: 1-5 current application regression
         run: npm run test:r5
+      - name: 11 PWA shell, unverified device display and public-only offline cache
+        run: node --test test/step11-pwa-shell.test.mjs
       - name: 6-8 device, anomaly, resource-zone policy regression
         run: |
           npm run decider:test
