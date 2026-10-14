@@ -37,6 +37,11 @@ test('the ACTUAL scripts/bundle.mjs invocation uses only approved modeled Git re
     ], 'actual subprocess command+argument list changed');
     assert.ok(commands.every(x => x.shell === false && x.optionKeys.includes('cwd')),
       'no shell or uncontrolled git working directory is allowed');
+    // Intentionally print only executable, arguments and option key names.
+    // Never print the environment, credential values, or Git output.
+    console.log('BUNDLE_PROCESSES', JSON.stringify(commands.map(c => ({
+      executable: c.executable, args: c.args, optionKeys: c.optionKeys, shell: c.shell
+    }))));
     assert.equal(run.status, 0, 'isolated bundle execution failed: ' +
       (run.stderr || run.error?.message || 'exit without error text').slice(0, 350));
     const bundle = JSON.parse(readFileSync(join(root, 'artifacts/submission.json'), 'utf8'));
