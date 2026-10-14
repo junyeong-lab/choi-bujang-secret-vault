@@ -633,3 +633,13 @@ node --test test/step10-policy-diff.test.mjs
 - 일반 메모·공지 API는 JWT의 발급자/역할만으로 기기를 승인하지 않습니다. 검증된 실제 학생 로그인 세션의 서버 기록과 승인 자격 증명을 모두 확인합니다. 단, **10단계 복원** 전용의 서명된 심판 호출은 메모 본문을 반환하지 않는 기존 심판 계약을 유지합니다.
 - `test/step11-no-device-token-exposure.test.mjs`를 추가해 클라이언트 스토리지 미사용, 기기 쿠키 발급 부재, 과거 토큰 폐기, 서버 세션 결합 및 JWT 예외 차단을 검증합니다. 이미 발급된 패스키는 보존하지만, 새 배포 후 기기 재확인을 다시 해야 정상 자료를 볼 수 있습니다.
 - 공식 심판 재평가에서 `S11_KEY_EXPOSED` 해결 여부는 **아직 미확인**입니다. 로컬/CI 검증을 공식 100점으로 표기하지 않습니다.
+
+
+### 11단계 S11_KEY_EXPOSED 재구현 — 통과자 서버 핸들 흐름 (2026-10-14)
+
+- **원인 분석:** 공식 심판이 이전 WebAuthn 방식 두 버전과 공개 캐시 제거 버전 모두에 `S11_KEY_EXPOSED`를 반환했습니다. 어느 바이트가 탐지됐는지 공개되지 않아 확정할 수 없습니다. 동일한 캐시·쿠키 조정을 반복하지 않고 11단계 구현 구조를 변경했습니다.
+- **직접 비교한 사례:** `minsanghwang/choi-bujang-secret-vault`의 **11단계 마지막 커밋 `194bea6ea59a66c325275ac0e8a069715c54d789`**. 이 저장소는 화면에서 WebAuthn 키를 생성하지 않고, 서버 발급 32바이트 무작위 핸들을 `__Host-aleph-dv` HttpOnly Secure SameSite=Strict 쿠키에만 넣습니다. 서버 DB에는 핸들의 SHA-256만 저장하고, 별도 관리자 승인 전에는 `pending`을 유지합니다.
+- **이번 적용:** 위 패턴을 기존 메모·공지·10단계 복원 프로젝트에 맞춰 적용했습니다. `src/device-approval.mjs`, `api/device.mjs`, `public/index.html`에서 기기 패스키·공개키 자격 생성과 검증 요청을 제거했습니다. 새 DB `step11_device_handles`는 RLS를 사용하며 anon/authenticated에게 읽기 권한이 없습니다. 등록 버튼은 `pending`만 생성하고, `GET /api/device`와 보호 API의 서버 검사만 `approved`를 신뢰합니다.
+- **이전 기록 보존:** 바꾸기 직전 `f7d7f5ab0fb17cfc82ee82291452821e0a46f39f`를 백업 브랜치 `backup-step11-s11-key-exposed-before-peer-20261014`에 고정했습니다. 이전 WebAuthn 소스·SQL은 현재 `main`에서 제외했지만 백업 브랜치 및 기존 운영 테이블/메모는 보존했습니다. 10단계 공식 100점 버전도 기존 커밋 `ae769c8e`에 보존되어 있습니다.
+- **제약:** 브라우저에 남는 서버 발급 불투명 핸들은 물리 기기 attestation 또는 암호학적 서명을 제공하는 것은 아닙니다. 승인 전 데이터 차단을 서버에서 확인하는 과제용 등록 방식입니다. 새로운 기기 핸들에는 기존 패스키 승인이 자동 이전되지 않으며 **관리자에게 다시 승인받아야** 합니다. 승인을 보장한다고 주장하거나 저장된 메모를 임의로 수정하지 않습니다.
+- **검증:** `test/step11-device-approval.test.mjs`와 `test/step11-no-device-token-exposure.test.mjs`에 서버 발급 핸들, 쿠키 원문 미노출, DB 해시·소유자 검사, 관리자가 승인하기 전 403 거부, 타인 쿠키 무효를 포함했습니다. GitHub Actions에서 전체 테스트와 `npm run bundle`을 검증합니다. 공식 심판 재평가 결과는 별도 확인이 필요합니다.
