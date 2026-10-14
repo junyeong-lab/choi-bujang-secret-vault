@@ -36,7 +36,7 @@ test('install indicator does not impersonate server device approval',()=>{
   assert.match(html,/서버 기기 승인: 미확인/u);
   assert.match(html,/설치했더라도 기기가 승인된 것은 아닙니다/u);
   assert.match(html,/로그인만 완료됨/u);
-  assert.match(html,/승인 확인 전에는 메모를 서버에서 받아오지 않습니다/u);
+  assert.match(html,/서버 승인 전에는 보호 메모를 표시하거나 요청하지 않습니다/u);
   assert.doesNotMatch(html,/(?:localStorage|sessionStorage|indexedDB)\s*[.(\[]/u);
   const js=html.match(/<script type="module">([\s\S]*?)<\/script>/u)?.[1];
   assert.ok(js,'missing UI script');
