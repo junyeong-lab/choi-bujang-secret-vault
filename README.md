@@ -601,7 +601,7 @@ node --test test/step10-policy-diff.test.mjs
 - 로그인 후 `GET /api/device`로 상태 확인. 미등록·대기·검증 필요·승인 상태를 화면에서 구분합니다.
 - `POST /api/device`의 `register-options` → 브라우저 WebAuthn `navigator.credentials.create()` → `register-finish`은 서버에 **pending** 자격 증명만 등록합니다. 등록 버튼은 절대로 승인하지 않습니다.
 - 별도 신뢰 관리자/교사가 `public.step11_device_credentials`에서 요청자·사용 기기를 대면 확인한 뒤 `status='approved'`로 승인을 부여해야 합니다. 해당 권한은 공개 API·브라우저에 없습니다. 2026-10-14 실제 브라우저 등록 요청 후 본인으로부터 사용 기기임을 확인받고, 관리자 권한으로 해당 대기 기기 1건을 별도 승인했습니다. 일반 사용자나 등록 버튼은 승인 권한이 없습니다.
-- 승인된 뒤 `verify-options` → `navigator.credentials.get()` → `verify-finish`이 5분짜리 일회용 서버 챌린지, RP ID, 정확한 출처, authenticator 서명 및 사용자 확인을 검증합니다. 그 후에만 서버가 15분 기기 확인 세션을 발행합니다. 기기 개인키는 WebAuthn 인증기에서 관리하고 앱 JavaScript·localStorage·sessionStorage·IndexedDB에는 저장하지 않습니다. 확인 세션은 서버에 SHA-256으로 저장하며 브라우저에는 HttpOnly Secure SameSite=Strict 쿠키만 설정합니다.
+- 승인된 뒤 `verify-options` → `navigator.credentials.get()` → `verify-finish`이 5분짜리 일회용 서버 챌린지, RP ID, 정확한 출처, authenticator 서명 및 사용자 확인을 검증합니다. 그 후에만 서버가 15분 기기 확인 세션을 발행합니다. 기기 개인키는 WebAuthn 인증기에서 관리하고 앱 JavaScript·localStorage·sessionStorage·IndexedDB에는 저장하지 않습니다. 확인 세션은 기존 로그인 쿠키의 서버 측 HMAC-SHA256 지문으로 연결하며, 추가 기기 토큰·기기 키는 브라우저 저장소나 응답에 넣지 않습니다. 기존 로그인 쿠키 자체는 앞 단계의 인증 방식 그대로 유지합니다.
 - 메모 목록/상세/추가/수정/삭제, 공지 읽기/쓰기에 **서버 미확인 기기는 403**을 반환합니다. 단순 로그인이나 PWA 설치는 접근 권한이 아닙니다. 기존 ALEPH 1~10단계의 서명 검증된 judge 요청 경로는 별도로 유지합니다.
 - 서버 DB 구조: `supabase/step11-devices.sql`, `step11_device_credentials`, `step11_device_challenges`, `step11_device_sessions`. 익명·일반 사용자 직접 테이블 접근을 차단하고, 승인·취소 권한은 관리자에만 둡니다.
 - 기기 승인 구현은 **웹 인증기 자격 증명을 서버의 승인 목록에 연결**합니다. WebAuthn attestation 형식 `none`만 허용하므로 회사 소유·관리 기기라는 하드웨어 증명까지 구현한 것은 아닙니다. 신뢰 관리자 확인이 추가로 필요합니다.
@@ -622,3 +622,14 @@ node --test test/step10-policy-diff.test.mjs
 - [GitHub Actions 검증](https://github.com/junyeong-lab/choi-bujang-secret-vault/actions/runs/38499152894): `npm ci`, `npm install`, PWA, WebAuthn, 1~10단계 회귀 테스트, `npm run bundle` 모두 성공. `step11-submission` 아티팩트에 제출 JSON 보관; `bundle-notes.json`와 `artifacts/submission.json`은 Git에서 제외했습니다.
 - `aleph.config.json`의 `step:11`, 실제 배포 주소, Auth 발급자와 허용 경로를 유지합니다. 기존 판정기는 `docs/DECIDER_REQUEST.md`의 이름만 읽고, 각 규칙 ID는 `RULE_IDS`에 정의되어 있습니다.
 - 다시 확인: 웹앱 로그인 → 기기 승인 상태 새로고침 → 승인된 기기 확인(패스키) → 본인 메모 표시. 새 미확인 브라우저에서는 로그인만 하고 인증 전 `GET /api/memos`가 403인지 확인합니다. 브라우저 저장소에 개인키/토큰을 직접 기록하지 않습니다.
+
+
+### 11단계 공식 심판 감점 및 수정 — S11_KEY_EXPOSED (2026-10-14)
+
+- 이전 제출 커밋 `30266a4cf482`: 공식 심판 **50/100**, `S11_KEY_EXPOSED` (화면·브라우저 저장소·제출 중 기기 키 노출 검색) 반환. 심판이 특정 노출 필드나 값은 공개하지 않았으므로 정확한 탐지 위치는 확정하지 않았습니다.
+- 문제점 점검 결과: 기존 구현은 기기 서명 확인에 성공하면 새 `vault_device` 쿠키로 무작위 토큰을 브라우저에 추가했고, 서명된 심판 JWT만으로 메모 API의 기기 확인을 건너뛰는 예외가 있었습니다. 추가 브라우저 기기 토큰은 과제의 저장소 금지 요구와 충돌할 수 있습니다.
+- 수정: 새 기기 쿠키를 발급하지 않고 **기존 로그인 JWT에 기기 검증 상태를 서버에서만 연결**합니다. 서버 DB에는 기기 자격 증명과 로그인 세션의 HMAC-SHA256 지문 및 15분 만료 시각을 저장하며 응답에는 승인 상태만 보냅니다.
+- 이전 버전이 발급한 `vault_device` 쿠키는 `GET /api/auth/session`에서 빈 값 및 `Max-Age=0`으로 정리합니다. 더 이상 새로운 기기 토큰을 발급하거나 기존 쿠키로 기기 승인을 처리하지 않습니다.
+- 일반 메모·공지 API는 JWT의 발급자/역할만으로 기기를 승인하지 않습니다. 검증된 실제 학생 로그인 세션의 서버 기록과 승인 자격 증명을 모두 확인합니다. 단, **10단계 복원** 전용의 서명된 심판 호출은 메모 본문을 반환하지 않는 기존 심판 계약을 유지합니다.
+- `test/step11-no-device-token-exposure.test.mjs`를 추가해 클라이언트 스토리지 미사용, 기기 쿠키 발급 부재, 과거 토큰 폐기, 서버 세션 결합 및 JWT 예외 차단을 검증합니다. 이미 발급된 패스키는 보존하지만, 새 배포 후 기기 재확인을 다시 해야 정상 자료를 볼 수 있습니다.
+- 공식 심판 재평가에서 `S11_KEY_EXPOSED` 해결 여부는 **아직 미확인**입니다. 로컬/CI 검증을 공식 100점으로 표기하지 않습니다.
