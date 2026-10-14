@@ -1,12 +1,11 @@
 // Server-side device-approval gate. A PWA install, browser-provided device ID,
 // user-agent, user-supplied role or login alone never creates device trust.
-import {randomBytes} from 'node:crypto';
+import {randomBytes,createHmac} from 'node:crypto';
 import {digestHex,encode64,decode64,constantEq,registrationResult,
   authenticationResult} from './device-webauthn.mjs';
 
 const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY=/^[a-f0-9]{64}$/;
-const CURRENT_SESSION='vault_device';
 const DOMAIN='step11_device_';
 const TTL_MS=15*60*1000;
 function safeOrigin(value) {
@@ -43,12 +42,15 @@ export function cookieValue(req,name){
     .find(x=>x.startsWith(name+'='))?.slice(name.length+1);
   return typeof value==='string'&&value.length<4096?value:null;
 }
-export function deviceSessionCookie(token,age=900){
-  if(!/^[A-Za-z0-9_-]{20,256}$/u.test(token))throw Error('invalid_session_token');
-  return CURRENT_SESSION+'='+token+'; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age='+age;
-}
-export function clearDeviceSessionCookie(){
-  return CURRENT_SESSION+'=; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=0';
+// Bind verification to the existing HttpOnly login session without issuing a
+// second device credential/cookie or persisting a device key in the browser.
+export function loginSessionFingerprint({req,db}) {
+  const login=cookieValue(req,'vault_session');
+  if(!login||!/^([A-Za-z0-9_-]+\.){2}[A-Za-z0-9_-]+$/.test(login)||
+      typeof db?.secret!=='string'||db.secret.length<10) return null;
+  return createHmac('sha256',db.secret)
+    .update('step11:device-verified-login:','utf8')
+    .update(login,'utf8').digest('hex');
 }
 export function validWriteOrigin(req,appOrigin){
   try{
@@ -60,17 +62,12 @@ export function validWriteOrigin(req,appOrigin){
 }
 export async function deviceSessionStatus({req,identity,db}){
   if(!identity)return {approved:false,status:'unauthorized'};
-  // ALEPH verified judge tokens are authenticated independently by signed
-  // issuer/audience validation. This avoids rewriting 1–10 judge semantics.
-  if(identity.kind==='judge')return {approved:true,status:'judge_verified'};
+  // Signed judge JWT proves user identity, NOT a registered device.
+  // Never permit unbound bearer-only requests through this gate.
   if(identity.kind!=='student'||!UUID.test(identity.userId))
-    return {approved:false,status:'unauthorized'};
-  const cookie=cookieValue(req,CURRENT_SESSION);
-  if(!cookie)return {approved:false,status:'verification_required'};
-  let bytes;
-  try{bytes=decode64(cookie,256)}catch{return {approved:false,status:'verification_required'}}
-  if(bytes.length!==32)return {approved:false,status:'verification_required'};
-  const hash=digestHex(bytes);
+    return {approved:false,status:'verification_required'};
+  const hash=loginSessionFingerprint({req,db});
+  if(!hash)return {approved:false,status:'verification_required'};
   const now=new Date().toISOString();
   const sessions=await deviceDb(db,'sessions',{params:{
     select:'credential_row_id,owner_id,expires_at',
@@ -173,7 +170,9 @@ export async function verifyOptions({identity,db}){
     allowCredentials:rows.map(x=>({id:x.credential_id,type:'public-key'}))
   }};
 }
-export async function verifyFinish({identity,db,appOrigin,body}){
+export async function verifyFinish({req,identity,db,appOrigin,body}){
+  const boundLogin=loginSessionFingerprint({req,db});
+  if(!boundLogin)throw Error('missing_verified_login_session');
   await consumeChallenge({identity,db,purpose:'verify',
     challengeId:body.challengeId,challenge:body.challenge});
   const credId=body?.credential?.rawId;
@@ -192,12 +191,12 @@ export async function verifyFinish({identity,db,appOrigin,body}){
     status:'eq.approved',sign_count:'eq.'+current.sign_count
   },body:{sign_count:result.signCount,last_verified_at:new Date().toISOString()}});
   if(!Array.isArray(updated)||updated.length!==1)throw Error('device_counter_changed');
-  const rawToken=randomBytes(32);
   const record=await deviceDb(db,'sessions',{method:'POST',body:{
     owner_id:identity.userId,credential_row_id:current.id,
-    session_sha256:digestHex(rawToken),
+    session_sha256:boundLogin,
     expires_at:new Date(Date.now()+TTL_MS).toISOString()
   }});
   if(!Array.isArray(record)||record.length!==1)throw Error('device_session_unavailable');
-  return {status:'approved',approved:true,cookie:deviceSessionCookie(encode64(rawToken))};
+  // Return only a status. No browser-visible device token or private key.
+  return {status:'approved',approved:true};
 }
