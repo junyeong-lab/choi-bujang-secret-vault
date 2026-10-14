@@ -85,7 +85,8 @@ export default async function handler(req,res) {
     verify??=createLoginVerifier({config,supabaseSecretKey:secret});
     const identity=await verify(authorization);
     if(!identity)return reply(401,{error:'unauthorized'});
-    if (!await requireApprovedDevice(req,res,identity,{origin:process.env.SUPABASE_URL,secret})) return;
+    // Signed Stage-10 judge restore may run without a browser device; no memo body is returned.
+    if(identity.kind==='student' && !await requireApprovedDevice(req,res,identity,{origin:process.env.SUPABASE_URL,secret})) return;
     const result=await runStep10Restore({
       id:req.query?.id,identity,authorization,body:req.body,
       secret,supabaseOrigin:process.env.SUPABASE_URL
