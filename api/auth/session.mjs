@@ -19,6 +19,10 @@ function verifier(secret) {
 export default async function handler(req, res) {
   res.setHeader('Cache-Control', 'no-store');
   res.setHeader('X-Content-Type-Options', 'nosniff');
+  // Retire the old, separately browser-stored device token. The new
+  // verification state lives only on the server, keyed by this login session.
+  res.setHeader('Set-Cookie',
+    'vault_device=; HttpOnly; Secure; SameSite=Strict; Path=/api; Max-Age=0');
 
   if (req.method !== 'GET') {
     res.setHeader('Allow', 'GET');
