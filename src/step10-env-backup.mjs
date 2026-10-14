@@ -101,6 +101,14 @@ export async function restoreFromEnv({
     if(current && String(current.owner_id).toLowerCase()!==ownerId.toLowerCase())
       return deny(403,'not_owner');
     const oldHash=current?sha(String(current.content)):'absent';
+    // Record the real, verified start BEFORE touching the note. If audit
+    // storage is unavailable, leave the note unchanged (fail closed).
+    const started=await rest(origin,secret,'step10_restore_audit','POST',{},{
+      memo_id:id,owner_id:ownerId,before_sha256:oldHash,
+      after_sha256:memo.contentSha256,outcome:'started'
+    },transport);
+    if(!started.ok||!Array.isArray(started.rows)||started.rows.length!==1)
+      return deny(503,'audit_unavailable');
     if(!current) {
       const created=await rest(origin,secret,'vault_memos','POST',{},{
         id,owner_id:ownerId,title:memo.title,content:memo.body
