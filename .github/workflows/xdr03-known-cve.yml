@@ -1,0 +1,47 @@
+name: XDR-03 known CVE isolated verification
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'xdr/known-cve/**'
+      - 'xdr/fixtures/known-cve.json'
+      - 'test/xdr-known-cve.test.mjs'
+      - '.github/workflows/xdr03-known-cve.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-known-cve:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify fixture and Stage 12 decider unchanged
+        run: |
+          test "$(git hash-object xdr/fixtures/known-cve.json)" = "d0f444a98e457a579fbce613012485d49936b17c"
+          test "$(git hash-object src/decider.mjs)" = "55192826188e2842cf8b025d9a935c278f067909"
+      - name: Compare source alerts with safe extracted output
+        run: |
+          node xdr/known-cve/read-alerts.mjs > /tmp/xdr03-alerts.jsonl
+          node -e 'const fs=require("node:fs");const a=JSON.parse(fs.readFileSync("xdr/fixtures/known-cve.json","utf8")).alerts;const b=fs.readFileSync("/tmp/xdr03-alerts.jsonl","utf8").trim().split(/\r?\n/).map(JSON.parse);if(a.length!==b.length||a.length!==24)throw Error("alert count mismatch");console.log("XDR03 ALERTS",a.length,"EXTRACTED",b.length);'
+      - name: Run classification and ZTNA candidate safety tests
+        run: node --test test/xdr-known-cve.test.mjs
+      - name: Run the real XDR fixture runner
+        run: npm run xdr:run -- known-cve
+      - name: Verify tracked result agrees with actual regenerated decisions
+        run: |
+          git diff --exit-code -- xdr/known-cve/result.json
+          node -e 'const fs=require("node:fs");const a=JSON.parse(fs.readFileSync("xdr/known-cve/result.json","utf8"));const f=JSON.parse(fs.readFileSync("xdr/fixtures/known-cve.json","utf8"));if(a.decisions.length!==24||a.counts.block!==8||a.counts.alert!==8||a.counts.record!==8||f.alerts.some((x,i)=>x.rule.level<=3&&a.decisions[i].action==="block"))throw Error("XDR03 classification mismatch");console.log("XDR03 verified block=8 alert=8 record=8 normalBlocked=0");'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xdr03-known-cve-isolated-result
+          path: xdr/known-cve/result.json
+          if-no-files-found: error
