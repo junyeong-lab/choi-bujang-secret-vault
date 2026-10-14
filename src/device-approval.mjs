@@ -4,7 +4,7 @@ import {randomBytes} from 'node:crypto';
 import {digestHex,encode64,decode64,constantEq,registrationResult,
   authenticationResult} from './device-webauthn.mjs';
 
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 const KEY=/^[a-f0-9]{64}$/;
 const CURRENT_SESSION='vault_device';
 const DOMAIN='step11_device_';
