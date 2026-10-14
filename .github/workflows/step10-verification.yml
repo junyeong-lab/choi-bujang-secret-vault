@@ -58,6 +58,8 @@ jobs:
           node --test test/step9.test.mjs
       - name: 12 operations room redacted results and unrun checks
         run: node --test test/step12-ops.test.mjs
+      - name: 12 isolated-bundle zero-network and not_run check
+        run: node --test test/step12-bundle-isolation.test.mjs
       - name: XDR supplementary regression
         run: node --test test/xdr-run.test.mjs
       - name: Prepare excluded submission notes
@@ -67,7 +69,7 @@ jobs:
         run: npm run bundle
       - name: Check step 12 bundle contents
         run: |
-          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==12||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==6)process.exit(1);console.log("STEP12",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==12||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==18||!x.attackAttempts.every(a=>a.observed==="not_run"))process.exit(1);console.log("STEP12",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
       - name: Archive submission JSON
         uses: actions/upload-artifact@v4
         with:
