@@ -1,0 +1,50 @@
+name: XDR-06 exfiltration isolated verification
+
+on:
+  push:
+    branches: [bonus-xdr-06-official-20261014, main]
+    paths:
+      - 'xdr/exfiltration/**'
+      - 'xdr/fixtures/exfiltration.json'
+      - 'test/xdr-exfiltration.test.mjs'
+      - '.github/workflows/xdr06-exfiltration.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-exfiltration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify baseline Stage 12 and all original XDR fixture SHA
+        run: |
+          test "$(git hash-object src/decider.mjs)" = "55192826188e2842cf8b025d9a935c278f067909"
+          test "$(git hash-object xdr/fixtures/exfiltration.json)" = "ccd294ff72eade41f13c350d69b05a42c346ba40"
+          test "$(git hash-object xdr/fixtures/privilege.json)" = "442fc3297bcc73969fa61b1368d08e0038b9c135"
+          test "$(git hash-object xdr/fixtures/persistence.json)" = "8dfb349b02cb0fd107a751c148be6165aa8c2725"
+          test "$(git hash-object xdr/fixtures/known-cve.json)" = "d0f444a98e457a579fbce613012485d49936b17c"
+      - name: Compare Wazuh original 30 events with 30 safe extractor lines
+        run: |
+          node xdr/exfiltration/read-alerts.mjs > /tmp/xdr06-safe-alerts.jsonl
+          node -e 'const fs=require("node:fs");const f=JSON.parse(fs.readFileSync("xdr/fixtures/exfiltration.json"));const rows=fs.readFileSync("/tmp/xdr06-safe-alerts.jsonl","utf8").trim().split(/\r?\n/).map(JSON.parse);const fields=["timestamp","sourceAddress","account","ruleLevel","description"];if(f.alerts.length!==30||rows.length!==f.alerts.length||rows.some(x=>JSON.stringify(Object.keys(x))!==JSON.stringify(fields)))throw Error("alert count or redaction shape mismatch");console.log("XDR06 extracted source=30 output=30");'
+      - name: XDR-06 and previous XDR module regression
+        run: node --test test/xdr-exfiltration.test.mjs test/xdr-privilege.test.mjs test/xdr-persistence.test.mjs test/xdr-known-cve.test.mjs test/xdr-run.test.mjs
+      - name: Run real official offline fixture tool
+        run: npm run xdr:run -- exfiltration
+      - name: Compare regenerated tracked result with 10 / 10 / 10 and zero normal block
+        run: |
+          git diff --exit-code -- xdr/exfiltration/result.json
+          node -e 'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync("xdr/exfiltration/result.json"));const f=JSON.parse(fs.readFileSync("xdr/fixtures/exfiltration.json"));const c=r.counts;if(r.schema!=="aleph.xdr.result.v1"||r.moduleKey!=="exfiltration"||r.decisions.length!==30||f.alerts.length!==30||c.block!==10||c.alert!==10||c.record!==10||f.alerts.some((a,i)=>a.rule.level<=3&&r.decisions[i].action==="block"))throw Error("XDR-06 counts or normal user safety mismatch");console.log("XDR06 verified block=10 alert=10 record=10 normalBlocked=0");'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xdr06-exfiltration-result
+          path: xdr/exfiltration/result.json
+          if-no-files-found: error

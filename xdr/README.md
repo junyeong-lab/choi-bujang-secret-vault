@@ -61,3 +61,14 @@ node scripts/xdr-run.mjs brute-force
 - 운영 판정기 규칙 변경 없음. 학습용 연결이며 실제 계정-세션 식별자 매핑 미연동
 - 재실행: npm run xdr:run -- privilege
 
+
+## XDR-06 exfiltration 구현
+
+- 근거: MITRE ATT&CK T1041(명령 통로 이용 반출), T1048(다른 프로토콜 이용 반출)
+- 원본 경보 30건 = 추출 30줄; 허용된 5개 필드만 출력
+- 분류: block 10 / alert 10 / record 10; 확인된 정상 이벤트 차단 0건
+- 대응: 고확신 사건에만 영향을 받은 PC+외부 목적지(dstip) 범위에서 15분 임시 거부 후보. 증거 경보 번호·만료 시각 포함
+- 로컬 알림: `xdr/alerts.log`, 민감한 IP/계정/파일 원문 기록 제외
+- ZTNA: 기존 판정 불변, 신뢰된 PC·목적지 확인을 전제로 학습 연결(운영 자동 차단 아님)
+- 재실행: `npm run xdr:run -- exfiltration`
+

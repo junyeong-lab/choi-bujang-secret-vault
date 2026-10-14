@@ -768,3 +768,18 @@ CI: .github/workflows/xdr04-persistence.yml에서 1~12단계 원본 판정기 SH
 회귀: node --test test/xdr-privilege.test.mjs
 검증: .github/workflows/xdr05-privilege.yml (독립 테스트 및 1~12단계 회귀 시험 병행). 공식 심판 점수는 제출 후 확인합니다.
 
+
+## 보너스 XDR-06 — 자료 빼돌리기 탐지 및 외부 목적지 거부
+
+- 원본: `xdr/fixtures/exfiltration.json` Wazuh 형식 가상 경보 30건. 원본과 1~12단계 판정기 및 이전 XDR 모듈은 수정하지 않습니다.
+- 제작 1: `xdr/exfiltration/read-alerts.mjs`는 시각·출발 주소·계정·규칙 수준·설명 5개 필드만 안전하게 출력하며 인증정보 형태를 가립니다.
+- 제작 2~3: `patterns.json`에 MITRE ATT&CK T1041, T1048의 대량·반복 전송, 낯선 목적지, 압축 반출 조건과 근거를 기록합니다. `decide.mjs`는 패턴을 상수로 보유하며 import, 네트워크, 파일 I/O 없이 판단합니다.
+- 제작 4: `respond.mjs`는 명확한 block 이벤트만 **전송 목적지(dstip)**에 관한 15분 임시 거부 후보로 등록합니다. 정상 PC가 같은 목적지를 이용하다 함께 차단되지 않도록 PC(Wazuh agent.name)와 목적지를 함께 묶습니다. 경보 ID·만료 시간을 보관하고 민감한 원문을 뺀 결과만 `xdr/alerts.log`에 한 줄씩 기록합니다.
+- ZTNA 연결: `ztna-bridge.mjs`는 기존 `src/decider.mjs` 판단을 먼저 실행하고 기존 deny/step_up을 존중합니다. 신뢰할 수 있는 별도의 PC와 목적지 매핑으로 학습용 추가 거부를 시연할 뿐, 실제 ALEPH 엔진의 목적지 정보를 제공받거나 운영망 차단을 구현한 것은 아닙니다.
+- 제작 5: `result.json`에 `block 10 / alert 10 / record 10`, 정상 경보 오차단 0건을 기록합니다.
+
+재실행: `npm run xdr:run -- exfiltration`
+경보 읽기 확인: `node xdr/exfiltration/read-alerts.mjs`
+회귀 검사: `node --test test/xdr-exfiltration.test.mjs`
+CI: `.github/workflows/xdr06-exfiltration.yml`에서 원본 보존, 정확한 재생성, 전 단계 회귀 테스트를 확인합니다. 학생 자체 검증은 공식 심판 판정과 구별합니다.
+
