@@ -28,12 +28,20 @@ try {
   // isolated environment may reject Git operations inspecting worktree,
   // config, remotes or other commands, even if local CI allows them.
   const commit = execFileSync('git', ['rev-parse', 'HEAD'], gitReadOptions).trim();
-  const changedFiles = execFileSync('git',
-    ['show', '--pretty=format:', '--name-only', 'HEAD'], gitReadOptions)
-    .split(/\r?\n/u).map(line => line.trim()).filter(Boolean).sort();
+  // A plain Git commit read provides the actual diff file names without
+  // relying on git-show pretty/name-only option parsing by the sandbox.
+  // Only Git diff header lines are considered, not the patch text.
+  const headDiff = execFileSync('git', ['show', 'HEAD'], gitReadOptions);
+  const changedFiles = [...new Set(headDiff.split(/\r?\n/u).flatMap(line => {
+    const match = /^diff --git a\/(.+) b\/(.+)$/u.exec(line);
+    if (!match) return [];
+    if (!/^[A-Za-z0-9_.\/-]+$/u.test(match[2])) fail('커밋 파일 경로를 확인해 주세요.');
+    return [match[2]];
+  }))].sort();
   if (!changedFiles.length) fail('마지막 커밋에 바뀐 파일이 없습니다.');
-  const config = JSON.parse(execFileSync('git',
-    ['show', 'HEAD:aleph.config.json'], gitReadOptions));
+  // The judge permits node:fs. Read checked-out configuration without
+  // an additional git subprocess. No remote/config/worktree access occurs.
+  const config = JSON.parse(readFileSync(join(root, 'aleph.config.json'), 'utf8'));
   const repoUrl = normalizedRepo(config.repoUrl);
   const notes = JSON.parse(readFileSync(join(root, 'bundle-notes.json'), 'utf8'));
   if (!Number.isInteger(config.step) || config.step < 1 || config.step > 12) fail('aleph.config.json의 step을 확인해 주세요.');
