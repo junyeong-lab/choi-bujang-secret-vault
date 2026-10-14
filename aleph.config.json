@@ -20,10 +20,11 @@
     "GET /api/notices/:id",
     "PUT /api/notices/:id",
     "DELETE /api/notices/:id",
-    "POST /api/restore/memo"
+    "POST /api/restore/memo",
+    "POST /api/restore/notes/:id"
   ],
   "originalApiUrl": "https://fijeiiqdyjqmunesjpyk.supabase.co/rest/v1/vault_memos",
-  "restoreRoute": "POST /api/restore/memo",
+  "restoreRoute": "POST /api/restore/notes/:id",
   "database": {
     "schema": "aleph.defense.database.v1",
     "url": "https://fijeiiqdyjqmunesjpyk.supabase.co",
