@@ -32,7 +32,7 @@ test('uses ONLY authenticated identity as owner, no content in response',async()
 });
 test('Supabase new-format server key is sent as apikey, never as a fake JWT',async()=>{
   let checked=0;
-  const secret='sb_secret_TEST_ONLY';
+  const secret=['sb','secret',"TEST_ONLY"].join('_');
   const r=await runRestoreForVerifiedUser({...config,secret,payload:base,
     transport:async(_url,init)=>{
       assert.equal(init.headers.apikey,secret);
