@@ -1,96 +1,83 @@
-// Server-side device-approval gate. A PWA install, browser-provided device ID,
-// user-agent, user-supplied role or login alone never creates device trust.
-import {randomBytes,createHmac} from 'node:crypto';
-import {digestHex,encode64,decode64,constantEq,registrationResult,
-  authenticationResult} from './device-webauthn.mjs';
-
-const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
-const KEY=/^[a-f0-9]{64}$/;
-const DOMAIN='step11_device_';
-const TTL_MS=15*60*1000;
-function safeOrigin(value) {
-  const url=new URL(value);
-  if(url.protocol!=='https:'||!url.hostname.endsWith('.supabase.co')||
-    url.port||url.username||url.password||url.search||url.hash||url.pathname!=='/')
-    throw Error('invalid_database_origin');
-  return url;
-}
-const apiKeyHeaders=(secret,withBody=false)=>({
-  apikey:secret,...(secret.startsWith('eyJ')?{Authorization:'Bearer '+secret}:{}),
-  Accept:'application/json',
-  ...(withBody?{'Content-Type':'application/json',Prefer:'return=representation'}:{})
-});
-export async function deviceDb({origin,secret,transport=fetch},resource,{method='GET',params={},body}={}){
-  if(!['credentials','challenges','sessions','consume'].includes(resource))
-    throw Error('unknown_device_resource');
-  if(typeof secret!=='string'||!secret)throw Error('missing_device_database_key');
-  const table=resource==='consume'?'rpc/step11_consume_challenge':DOMAIN+resource;
-  const url=new URL('/rest/v1/'+table,safeOrigin(origin));
-  for(const [name,value] of Object.entries(params))url.searchParams.set(name,String(value));
-  const headers=apiKeyHeaders(secret,body!==undefined);
-  // Repeated passkey checks renew this login's server-side approval.
-  if(resource==='sessions'&&method==='POST'&&params.on_conflict==='session_sha256')
-    headers.Prefer='resolution=merge-duplicates,return=representation';
-  const response=await transport(url,{
-    method,
-    headers,
-    ...(body===undefined?{}:{body:JSON.stringify(body)}),
-    cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)
-  });
-  if(!response.ok)throw Error('device_database_error');
-  let payload;try{payload=await response.json()}catch{payload=null}
-  return payload;
-}
+// Stage 11: server-approved opaque device handles, adapted to this app.
+// Only SHA-256 fingerprints and the owner's authenticated UUID are stored in DB.
+// A browser cannot grant its own approval. No passkey secret or private key is
+// generated or serialized by application JavaScript.
+import {randomBytes,createHash} from 'node:crypto';
+export const DEVICE_COOKIE='__Host-aleph-dv';
+const HANDLE=/^[A-Za-z0-9_-]{43}$/u;
+const UUID=/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/iu;
+const STATUSES=new Set(['pending','approved','revoked']);
+const MAX_ACTIVE=5;
+const AGE_SECONDS=30*24*60*60;
+const digest=text=>createHash('sha256').update(text,'utf8').digest('hex');
 export function cookieValue(req,name){
-  const value=(req?.headers?.cookie??'').split(';').map(x=>x.trim())
-    .find(x=>x.startsWith(name+'='))?.slice(name.length+1);
-  return typeof value==='string'&&value.length<4096?value:null;
-}
-// Bind verification to the existing HttpOnly login session without issuing a
-// second device credential/cookie or persisting a device key in the browser.
-export function loginSessionFingerprint({req,db}) {
-  const login=cookieValue(req,'vault_session');
-  if(!login||!/^([A-Za-z0-9_-]+\.){2}[A-Za-z0-9_-]+$/.test(login)||
-      typeof db?.secret!=='string'||db.secret.length<10) return null;
-  return createHmac('sha256',db.secret)
-    .update('step11:device-verified-login:','utf8')
-    .update(login,'utf8').digest('hex');
+  const raw=(req?.headers?.cookie??'').split(';')
+    .map(part=>part.trim()).find(part=>part.startsWith(name+'='));
+  const val=raw?.slice(name.length+1);
+  return typeof val==='string' && val.length<4096 ? val : null;
 }
 export function validWriteOrigin(req,appOrigin){
   try{
-    const sent=new URL(req.headers.origin);
-    const app=new URL(appOrigin);
-    return sent.origin===app.origin&&req.headers.host===app.host&&
-      sent.protocol==='https:'&&!sent.username&&!sent.password;
+    const origin=new URL(req.headers.origin),app=new URL(appOrigin);
+    return origin.protocol==='https:' && origin.origin===app.origin &&
+      req.headers.host===app.host && !origin.username && !origin.password;
   }catch{return false}
 }
+export async function deviceDb({origin,secret,transport=fetch},method='GET',
+    filters={},body){
+  const root=new URL(origin);
+  if(root.protocol!=='https:'||!root.hostname.endsWith('.supabase.co')||
+    root.username||root.password||root.search||root.hash||
+    (root.pathname!=='/'&&root.pathname!=='')){
+    throw Error('invalid_database_origin');
+  }
+  if(typeof secret!=='string'||!secret)throw Error('missing_database_secret');
+  const url=new URL('/rest/v1/step11_device_handles',root);
+  for(const [key,value] of Object.entries(filters))url.searchParams.set(key,String(value));
+  const headers={apikey:secret,Accept:'application/json',
+    ...(secret.startsWith('eyJ')?{Authorization:'Bearer '+secret}:{})};
+  if(body!==undefined){
+    headers['Content-Type']='application/json';headers.Prefer='return=representation';
+  }
+  const res=await transport(url,{method,headers,
+    ...(body===undefined?{}:{body:JSON.stringify(body)}),
+    redirect:'error',cache:'no-store',signal:AbortSignal.timeout(8000)});
+  if(!res.ok)throw Error('device_database_unavailable');
+  let rows;
+  try{rows=await res.json()}catch{rows=null}
+  if(!Array.isArray(rows))throw Error('unexpected_device_rows');
+  return rows;
+}
+async function myDevice({req,identity,db}){
+  if(!identity||identity.kind!=='student'||!UUID.test(identity.userId))
+    return {status:'unregistered',approved:false};
+  // A device cookie alone never grants access. Both browser login and
+  // authenticated principal must agree; Bearer-only calls are not device proof.
+  const login=cookieValue(req,'vault_session');
+  const bearer=req.headers?.authorization;
+  if(!login||(bearer && bearer!=='Bearer '+login))
+    return {status:'unregistered',approved:false};
+  const handle=cookieValue(req,DEVICE_COOKIE);
+  if(!HANDLE.test(handle??''))return {status:'unregistered',approved:false};
+  const rows=await deviceDb(db,'GET',{
+    select:'id,status,requested_at,decided_at',
+    handle_sha256:'eq.'+digest(handle),
+    owner_id:'eq.'+identity.userId,limit:'1'
+  });
+  const record=rows[0];
+  if(!record)return {status:'unregistered',approved:false};
+  const status=STATUSES.has(record.status)?record.status:'unregistered';
+  return {status,approved:status==='approved',deviceId:record.id};
+}
 export async function deviceSessionStatus({req,identity,db}){
-  if(!identity)return {approved:false,status:'unauthorized'};
-  // Signed judge JWT proves user identity, NOT a registered device.
-  // Never permit unbound bearer-only requests through this gate.
-  if(identity.kind!=='student'||!UUID.test(identity.userId))
-    return {approved:false,status:'verification_required'};
-  const hash=loginSessionFingerprint({req,db});
-  if(!hash)return {approved:false,status:'verification_required'};
-  const now=new Date().toISOString();
-  const sessions=await deviceDb(db,'sessions',{params:{
-    select:'credential_row_id,owner_id,expires_at',
-    session_sha256:'eq.'+hash,owner_id:'eq.'+identity.userId,
-    expires_at:'gt.'+now,limit:'1'
-  }});
-  if(!Array.isArray(sessions)||sessions.length!==1)
-    return {approved:false,status:'verification_required'};
-  const cred=await deviceDb(db,'credentials',{params:{
-    select:'id,status',id:'eq.'+sessions[0].credential_row_id,
-    owner_id:'eq.'+identity.userId,status:'eq.approved',limit:'1'
-  }});
-  return Array.isArray(cred)&&cred.length===1
-    ? {approved:true,status:'approved'}
-    : {approved:false,status:'verification_required'};
+  return myDevice({req,identity,db});
+}
+export async function getDeviceStatus({req,identity,db}){
+  return myDevice({req,identity,db});
 }
 export async function requireApprovedDevice(req,res,identity,db){
   try{
-    const state=await deviceSessionStatus({req,identity,db});
+    const state=await myDevice({req,identity,db});
     if(state.approved)return true;
     res.status(403).json({error:'device_not_approved'});
     return false;
@@ -99,109 +86,33 @@ export async function requireApprovedDevice(req,res,identity,db){
     return false;
   }
 }
-function stateFromRows(rows){
-  if(!Array.isArray(rows))throw Error('invalid_device_rows');
-  if(rows.some(x=>x.status==='approved'))return 'verification_required';
-  if(rows.some(x=>x.status==='pending'))return 'pending';
-  return 'unregistered';
+export function emptyDeviceBody(raw){
+  if(raw===undefined||raw===null||raw==='')return true;
+  if(typeof raw==='string'){try{raw=JSON.parse(raw)}catch{return false}}
+  return !!raw&&typeof raw==='object'&&!Array.isArray(raw)&&Object.keys(raw).length===0;
 }
-export async function getDeviceStatus({req,identity,db}){
-  const status=await deviceSessionStatus({req,identity,db});
-  if(status.approved)return {status:'approved',approved:true};
-  const rows=await deviceDb(db,'credentials',{params:{
-    select:'status',owner_id:'eq.'+identity.userId,limit:'20'
-  }});
-  return {status:stateFromRows(rows),approved:false};
-}
-function challengeOptions(){
-  return {value:encode64(randomBytes(32)),expiresAt:new Date(Date.now()+5*60*1000).toISOString()};
-}
-async function createChallenge({identity,db,purpose}){
-  const options=challengeOptions();
-  const rows=await deviceDb(db,'challenges',{method:'POST',body:{
-    owner_id:identity.userId,challenge_sha256:digestHex(decode64(options.value)),
-    purpose,expires_at:options.expiresAt
-  }});
-  if(!Array.isArray(rows)||rows.length!==1||!UUID.test(rows[0].id))
-    throw Error('challenge_not_created');
-  return {challengeId:rows[0].id,challenge:options.value};
-}
-async function consumeChallenge({identity,db,purpose,challengeId,challenge}){
-  if(!UUID.test(challengeId))throw Error('bad_challenge_id');
-  const actual=digestHex(decode64(challenge,256));
-  const expected=await deviceDb(db,'consume',{method:'POST',body:{
-    p_id:challengeId,p_owner_id:identity.userId,p_purpose:purpose
-  }});
-  if(typeof expected!=='string'||!KEY.test(expected)||
-     !constantEq(Buffer.from(actual,'hex'),Buffer.from(expected,'hex')))
-    throw Error('invalid_challenge');
-}
-export async function registerOptions({identity,db,appOrigin}){
-  const {hostname}=new URL(appOrigin);
-  const request=await createChallenge({identity,db,purpose:'register'});
-  // Stable opaque owner handle derived from UUID; never serialize an access token.
-  const userHandle=encode64(Buffer.from(identity.userId.replaceAll('-',''),'hex'));
-  return {status:'registration_required',...request,publicKey:{
-    challenge:request.challenge,rp:{name:'BYTE BACK',id:hostname},
-    user:{id:userHandle,name:'BYTE BACK 사용자',displayName:'자료실 사용자'},
-    pubKeyCredParams:[{type:'public-key',alg:-7}],timeout:60000,
-    attestation:'none',authenticatorSelection:{residentKey:'preferred',userVerification:'required'}
-  }};
-}
-export async function registerFinish({identity,db,appOrigin,body}){
-  await consumeChallenge({identity,db,purpose:'register',
-    challengeId:body.challengeId,challenge:body.challenge});
-  const verified=registrationResult({credential:body.credential,challenge:body.challenge,
-    origin:appOrigin,rpId:new URL(appOrigin).hostname});
-  const rows=await deviceDb(db,'credentials',{method:'POST',body:{
-    owner_id:identity.userId,credential_id:verified.credentialId,
-    public_key_jwk:verified.publicKeyJwk,sign_count:verified.signCount,status:'pending'
-  }});
-  if(!Array.isArray(rows)||rows.length!==1)return {status:'error'};
-  // Enrollment is NEVER self-approval. A separate privileged operator must
-  // approve the pending record before any protected data is available.
-  return {status:'pending',approved:false};
-}
-export async function verifyOptions({identity,db}){
-  const rows=await deviceDb(db,'credentials',{params:{
-    select:'credential_id',owner_id:'eq.'+identity.userId,
-    status:'eq.approved',limit:'20'
-  }});
-  if(!Array.isArray(rows)||rows.length===0)return {status:'not_approved'};
-  const {challengeId,challenge}=await createChallenge({identity,db,purpose:'verify'});
-  return {status:'verification_required',challengeId,challenge,publicKey:{
-    challenge,timeout:60000,userVerification:'required',
-    allowCredentials:rows.map(x=>({id:x.credential_id,type:'public-key'}))
-  }};
-}
-export async function verifyFinish({req,identity,db,appOrigin,body}){
-  const boundLogin=loginSessionFingerprint({req,db});
-  if(!boundLogin)throw Error('missing_verified_login_session');
-  await consumeChallenge({identity,db,purpose:'verify',
-    challengeId:body.challengeId,challenge:body.challenge});
-  const credId=body?.credential?.rawId;
-  if(typeof credId!=='string'||credId.length>2048)return {status:'not_approved'};
-  const rows=await deviceDb(db,'credentials',{params:{
-    select:'id,owner_id,credential_id,public_key_jwk,sign_count,status',
-    credential_id:'eq.'+credId,owner_id:'eq.'+identity.userId,
-    status:'eq.approved',limit:'1'
-  }});
-  if(!Array.isArray(rows)||rows.length!==1)return {status:'not_approved'};
-  const current=rows[0];
-  const result=authenticationResult({credential:body.credential,challenge:body.challenge,
-    origin:appOrigin,rpId:new URL(appOrigin).hostname,stored:current});
-  const updated=await deviceDb(db,'credentials',{method:'PATCH',params:{
-    id:'eq.'+current.id,owner_id:'eq.'+identity.userId,
-    status:'eq.approved',sign_count:'eq.'+current.sign_count
-  },body:{sign_count:result.signCount,last_verified_at:new Date().toISOString()}});
-  if(!Array.isArray(updated)||updated.length!==1)throw Error('device_counter_changed');
-  const record=await deviceDb(db,'sessions',{method:'POST',
-    params:{on_conflict:'session_sha256'},body:{
-    owner_id:identity.userId,credential_row_id:current.id,
-    session_sha256:boundLogin,
-    expires_at:new Date(Date.now()+TTL_MS).toISOString()
-  }});
-  if(!Array.isArray(record)||record.length!==1)throw Error('device_session_unavailable');
-  // Return only a status. No browser-visible device token or private key.
-  return {status:'approved',approved:true};
+export async function requestDeviceRegistration({req,identity,db}){
+  if(!emptyDeviceBody(req.body))return {code:400,body:{error:'invalid_device_request'}};
+  if(!identity||identity.kind!=='student'||!UUID.test(identity.userId)||
+    !cookieValue(req,'vault_session'))return {code:401,body:{error:'unauthorized'}};
+  // Already registered: same browser, same owner, no duplicate new rows.
+  const mine=await myDevice({req,identity,db});
+  if(mine.status!=='unregistered')
+    return {code:200,body:{status:mine.status,approved:mine.approved,deviceId:mine.deviceId}};
+  const existing=await deviceDb(db,'GET',{
+    select:'id',owner_id:'eq.'+identity.userId,
+    status:'in.(pending,approved)',limit:String(MAX_ACTIVE)
+  });
+  if(existing.length>=MAX_ACTIVE)return {code:429,body:{error:'device_limit'}};
+  const handle=randomBytes(32).toString('base64url');
+  const records=await deviceDb(db,'POST',{},{
+    owner_id:identity.userId,handle_sha256:digest(handle),status:'pending'
+  });
+  if(records.length!==1||!UUID.test(records[0].id))
+    throw Error('device_registration_failed');
+  // HttpOnly means application JS cannot read the opaque handle; its SHA is
+  // kept server-side and approval requires a privileged DB action.
+  const cookie=DEVICE_COOKIE+'='+handle+
+    '; Max-Age='+AGE_SECONDS+'; Path=/; HttpOnly; Secure; SameSite=Strict';
+  return {code:201,body:{status:'pending',approved:false,deviceId:records[0].id},cookie};
 }
