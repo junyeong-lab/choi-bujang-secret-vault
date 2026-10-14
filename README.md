@@ -752,3 +752,19 @@ node --test test/step10-policy-diff.test.mjs
 회귀: node --test test/xdr-persistence.test.mjs
 CI: .github/workflows/xdr04-persistence.yml에서 1~12단계 원본 판정기 SHA와 원본 경보 SHA를 유지하며 검사합니다. 학생 자체 검증은 공식 심판 결과와 구분합니다.
 
+
+## 보너스 XDR-05 — 권한 가로채기·비정상 관리자 권한 감시
+
+- 입력은 xdr/fixtures/privilege.json의 가상 Wazuh 경보 26건이며 원본은 변경하지 않습니다.
+- 제작 1: xdr/privilege/read-alerts.mjs가 시각, 출발 주소, 계정, 규칙 수준, 설명만 읽고 비밀값 형태를 가립니다.
+- 제작 2: patterns.json에 ATT&CK T1068, T1078 관련 조건과 근거를 기록합니다. 관리자 명령만으로 T1068 취약점 악용을 단정하지 않습니다.
+- 제작 3: decide.mjs는 patterns.json의 패턴을 파일 상단에 고정한 독립 모듈입니다. import/파일 I-O/네트워크 없이 block(>=0.85), alert(>=0.5), record로 구분합니다.
+- 제작 4: respond.mjs는 확정 block만 해당 Wazuh PC와 계정의 조합에 15분 임시 세션 회수 후보를 등록하고 만료 시각 및 근거 경보 번호를 저장합니다. alert/record는 차단 규칙을 생성하지 않습니다. xdr/alerts.log에는 민감한 계정/원문/주소 없이 결과만 남깁니다.
+- ZTNA 학습 연결: ztna-bridge.mjs는 기존 src/decider.mjs 결과를 우선 보존합니다. 별도로 신뢰성 있게 검증한 세션-Wazuh PC/계정 매핑이 있는 경우에만 임시 거부를 적용하는 학습용 구조입니다. 실제 ALEPH SDP 계약에는 Wazuh 계정이 없으며 운영 세션 회수 API에 연결되었다고 주장하지 않습니다.
+- 제작 5: 실제 runner로 경보 26건을 block 9 / alert 8 / record 9로 분류하고 정상 이벤트 오차단 0건을 확인합니다.
+
+재실행: npm run xdr:run -- privilege
+경보 읽기: node xdr/privilege/read-alerts.mjs
+회귀: node --test test/xdr-privilege.test.mjs
+검증: .github/workflows/xdr05-privilege.yml (독립 테스트 및 1~12단계 회귀 시험 병행). 공식 심판 점수는 제출 후 확인합니다.
+

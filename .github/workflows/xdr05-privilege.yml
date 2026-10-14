@@ -1,0 +1,49 @@
+name: XDR-05 privilege isolated verification
+
+on:
+  push:
+    branches: [bonus-xdr-05-official-20261014, main]
+    paths:
+      - 'xdr/privilege/**'
+      - 'xdr/fixtures/privilege.json'
+      - 'test/xdr-privilege.test.mjs'
+      - '.github/workflows/xdr05-privilege.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-privilege:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Protect original Stage 12, XDR-03, XDR-04 and raw fixture
+        run: |
+          test "$(git hash-object src/decider.mjs)" = "55192826188e2842cf8b025d9a935c278f067909"
+          test "$(git hash-object xdr/fixtures/privilege.json)" = "442fc3297bcc73969fa61b1368d08e0038b9c135"
+          test "$(git hash-object xdr/fixtures/persistence.json)" = "8dfb349b02cb0fd107a751c148be6165aa8c2725"
+          test "$(git hash-object xdr/fixtures/known-cve.json)" = "d0f444a98e457a579fbce613012485d49936b17c"
+      - name: Verify Wazuh source 26 to redacted 26 lines
+        run: |
+          node xdr/privilege/read-alerts.mjs > /tmp/xdr05-privilege.jsonl
+          node -e 'const fs=require("node:fs");const a=JSON.parse(fs.readFileSync("xdr/fixtures/privilege.json")).alerts;const rows=fs.readFileSync("/tmp/xdr05-privilege.jsonl","utf8").trim().split(/\r?\n/).map(JSON.parse);const cols=["timestamp","sourceAddress","account","ruleLevel","description"];if(a.length!==26||rows.length!==a.length||rows.some(x=>JSON.stringify(Object.keys(x))!==JSON.stringify(cols)))throw Error("XDR-05 input count/fields mismatch");console.log("XDR05 original=26 extracted=26");'
+      - name: Verify XDR-05, XDR-04, XDR-03 and shared XDR runner
+        run: node --test test/xdr-privilege.test.mjs test/xdr-persistence.test.mjs test/xdr-known-cve.test.mjs test/xdr-run.test.mjs
+      - name: Run actual offline XDR runner
+        run: npm run xdr:run -- privilege
+      - name: Verify tracked result and no normal-user blocks
+        run: |
+          git diff --exit-code -- xdr/privilege/result.json
+          node -e 'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync("xdr/privilege/result.json"));const f=JSON.parse(fs.readFileSync("xdr/fixtures/privilege.json"));const c=r.counts;if(r.schema!=="aleph.xdr.result.v1"||r.moduleKey!=="privilege"||r.decisions.length!==26||f.alerts.length!==26||c.block!==9||c.alert!==8||c.record!==9||f.alerts.some((a,i)=>a.rule.level<=3&&r.decisions[i].action==="block"))throw Error("XDR-05 classification mismatch");console.log("XDR05 verified block=9 alert=8 record=9 normalBlocked=0");'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xdr05-privilege-result
+          path: xdr/privilege/result.json
+          if-no-files-found: error

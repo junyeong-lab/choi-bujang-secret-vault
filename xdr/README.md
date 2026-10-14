@@ -51,3 +51,13 @@ node scripts/xdr-run.mjs brute-force
 - 재생성: npm run xdr:run -- persistence
 - 결과: block 8, alert 8, record 8, 정상 이벤트 block 0
 
+
+## XDR-05 privilege 구현
+
+- MITRE ATT&CK T1068, T1078의 관리자 그룹·권한 상승 및 비정상 고권한 명령 신호
+- 경보 추출: 원본 26건 = 출력 26줄, 허용된 다섯 필드만 출력
+- 독립 판정: 9 block, 8 alert, 9 record; 정상 이벤트 block 0건
+- 대응 후보: 확정 공격만 Wazuh PC+계정 범위의 15분 임시 세션 거부, ID·만료 기록 및 안전 로그
+- 운영 판정기 규칙 변경 없음. 학습용 연결이며 실제 계정-세션 식별자 매핑 미연동
+- 재실행: npm run xdr:run -- privilege
+
