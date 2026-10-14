@@ -78,11 +78,11 @@ test('verified B alone is restored; other notes, old audits, and all rules are u
   assert.equal(answer.body.contentSha256,sha(original.content));
   assert.equal(JSON.stringify(w.rows.filter(x=>x.id!==id)),others);
   assert.equal(JSON.stringify(w.audits[0]),oldAudit);
-  assert.deepEqual(w.audits.slice(1).map(x=>x.outcome),['restored']);
+  assert.deepEqual(w.audits.slice(1).map(x=>x.outcome),['started','restored']);
   assert.equal(w.rows.find(x=>x.id===id).content,original.content);
   assert.ok(w.calls.every(x=>x.method!=='DELETE'));
   assert.deepEqual(w.calls.filter(x=>['PATCH','POST'].includes(x.method)).map(x=>x.table),
-    ['vault_memos','step10_restore_audit']);
+    ['step10_restore_audit','vault_memos','step10_restore_audit']);
   assert.equal(JSON.stringify(answer).includes(original.content),false);
 });
 test('deleted note is recreated with the exact owner and ID',async()=>{
@@ -91,7 +91,7 @@ test('deleted note is recreated with the exact owner and ID',async()=>{
   assert.equal(answer.status,200);
   assert.equal(answer.body.created,true);
   assert.equal(w.rows.find(x=>x.id===id).owner_id,B);
-  assert.equal(w.audits.length,2);
+  assert.equal(w.audits.length,3);
 });
 test('failed audit is never reported as a successful restore',async()=>{
   const w=world({auditFails:true});
