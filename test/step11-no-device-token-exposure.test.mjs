@@ -26,6 +26,9 @@ test('no device key or additional device cookie gets into served JS or responses
   assert.doesNotMatch(server,/deviceSessionCookie/u);
   assert.doesNotMatch(server,/vault_device/u);
   assert.match(worker,/startsWith\('\/api\/'\)/u);
+  assert.doesNotMatch(worker,/caches\.(?:open|match)/u);
+  assert.doesNotMatch(worker,/\b(?:cache\.put|cache\.add|cache\.addAll)\(/u);
+  assert.match(worker,/caches\.delete\(key\)/u);
 });
 test('server-side verification is bound to existing signed-login context only',()=>{
   const db={secret:dbSecret};
