@@ -346,8 +346,8 @@ async function restoreSession() {
   }
 }
 
-// A platform authenticator/passkey holds the private key. We only pass the
-// public registration response or a signed, one-time server challenge.
+// WebAuthn signing happens inside the authenticator. This screen handles
+// only challenge requests and signed responses; it stores no device secrets.
 function fromBase64url(value) {
   const raw=atob(value.replace(/-/g,'+').replace(/_/g,'/'));
   return Uint8Array.from(raw, char=>char.charCodeAt(0));
