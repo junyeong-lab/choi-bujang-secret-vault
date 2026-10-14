@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import {test} from 'node:test';
 import {createHash,generateKeyPairSync,sign,randomBytes} from 'node:crypto';
 import {registrationResult,authenticationResult,encode64,digestHex} from '../src/device-webauthn.mjs';
-import {deviceSessionStatus,requireApprovedDevice,deviceSessionCookie,
-  clearDeviceSessionCookie,validWriteOrigin} from '../src/device-approval.mjs';
+import {deviceSessionStatus,requireApprovedDevice,loginSessionFingerprint,
+  validWriteOrigin} from '../src/device-approval.mjs';
 import {readFileSync} from 'node:fs';
 
 const rp='choi-bujang-secret-vault-pi.vercel.app',origin='https://'+rp;
@@ -28,7 +28,7 @@ function encode(value){
   throw Error('unknown_fixture');
 }
 const credentialId=randomBytes(32);
-const {publicKey,privateKey}=generateKeyPairSync('ec',{namedCurve:'P-256'});
+const {publicKey,privateKey:ephemeralTestSigner}=generateKeyPairSync('ec',{namedCurve:'P-256'});
 const jwk=publicKey.export({format:'jwk'});
 const rawId=encode64(credentialId);
 const challenge=encode64(randomBytes(32));
@@ -56,7 +56,7 @@ test('passkey registration verifies challenge, app origin, RP hash and public ke
 });
 test('approved credential must sign a fresh server challenge; wrong origin or signature fails',()=>{
   const authenticatorData=auth(0x05,1),clientData=client('webauthn.get');
-  const signature=sign('sha256',Buffer.concat([authenticatorData,sha(Buffer.from(clientData,'base64url'))]),privateKey);
+  const signature=sign('sha256',Buffer.concat([authenticatorData,sha(Buffer.from(clientData,'base64url'))]),ephemeralTestSigner);
   const credential={id:rawId,rawId,type:'public-key',response:{
     clientDataJSON:clientData,authenticatorData:encode64(authenticatorData),
     signature:encode64(signature)
@@ -86,18 +86,21 @@ test('login / installation or a fake device cookie cannot authorize protected re
     }};
   assert.deepEqual(await deviceSessionStatus({req:bogus,identity,db}),
     {approved:false,status:'verification_required'});
-  assert.equal(calls.length,1);
-  assert.equal(await deviceSessionStatus({req:noCookie,identity:{kind:'judge',userId:B},db}).then(x=>x.approved),true);
+  assert.equal(calls.length,0);
+  // Even a signed judge bearer does NOT prove physical/device enrollment.
+  assert.deepEqual(await deviceSessionStatus({req:noCookie,identity:{kind:'judge',userId:B},db}),
+    {approved:false,status:'verification_required'});
 });
 test('only server-approved credential linked to a live HttpOnly session opens access',async()=>{
-  const token=encode64(randomBytes(32));
+  const loginJwt='fixtureheader.fixturepayload.fixturesignature';
   const credentialRow='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-  const req={headers:{cookie:'vault_session=NOT_USED; vault_device='+token}};
+  const req={headers:{cookie:'vault_session='+loginJwt}};
   let status='pending';
   const db={origin:'https://unit.supabase.co',secret:'sb_secret_TEST',transport:async url=>{
     const u=new URL(url);
     if(u.pathname.endsWith('/step11_device_sessions')){
-      assert.equal(u.searchParams.get('session_sha256'),'eq.'+digestHex(Buffer.from(token,'base64url')));
+      assert.equal(u.searchParams.get('session_sha256'),'eq.'+
+        loginSessionFingerprint({req,db:{secret:'sb_secret_TEST'}}));
       return new Response(JSON.stringify([{owner_id:B,credential_row_id:credentialRow,
         expires_at:new Date(Date.now()+10000).toISOString()}]),{status:200});
     }
@@ -109,8 +112,9 @@ test('only server-approved credential linked to a live HttpOnly session opens ac
   assert.equal((await deviceSessionStatus({req,identity:{kind:'student',userId:B},db})).approved,false);
   status='approved';
   assert.equal((await deviceSessionStatus({req,identity:{kind:'student',userId:B},db})).approved,true);
-  assert.match(deviceSessionCookie(token),/HttpOnly; Secure; SameSite=Strict; Path=\/api/);
-  assert.match(clearDeviceSessionCookie(),/Max-Age=0/);
+  // A second browser-stored device token must not be issued.
+  const legacyOnly={headers:{cookie:'vault_device='+encode64(randomBytes(32))}};
+  assert.equal((await deviceSessionStatus({req:legacyOnly,identity:{kind:'student',userId:B},db})).approved,false);
   assert.equal(validWriteOrigin({headers:{origin,host:rp}},origin),true);
   assert.equal(validWriteOrigin({headers:{origin:'https://evil.example.com',host:rp}},origin),false);
 });
