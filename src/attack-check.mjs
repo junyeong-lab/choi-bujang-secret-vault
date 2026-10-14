@@ -1,6 +1,6 @@
 // Do not return tokens, private keys, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 구현해 주세요.');
   }
 
@@ -103,7 +103,7 @@ export async function runAttackChecks(config) {
   const detailResponse = await request('/api/memos/00000000-0000-4000-8000-000000000000');
   const detailObserved = await checkDenied(detailResponse, '단건 조회');
 
-  if (config.step === 4 || config.step === 5 || config.step === 6 || config.step === 7 || config.step === 8 || config.step === 9 || config.step === 10) {
+  if (config.step === 4 || config.step === 5 || config.step === 6 || config.step === 7 || config.step === 8 || config.step === 9 || config.step === 10 || config.step === 11) {
 const dbUrl = config.step >= 5
   ? new URL(config.originalApiUrl)
   : new URL(
