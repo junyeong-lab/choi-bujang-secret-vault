@@ -1,0 +1,48 @@
+name: XDR-04 persistence isolated verification
+
+on:
+  push:
+    branches: [bonus-xdr-04-official-20261014, main]
+    paths:
+      - 'xdr/persistence/**'
+      - 'xdr/fixtures/persistence.json'
+      - 'test/xdr-persistence.test.mjs'
+      - '.github/workflows/xdr04-persistence.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify-persistence:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+      - run: npm ci
+      - name: Verify original Stage-12 decider and alert fixtures
+        run: |
+          test "$(git hash-object src/decider.mjs)" = "55192826188e2842cf8b025d9a935c278f067909"
+          test "$(git hash-object xdr/fixtures/persistence.json)" = "8dfb349b02cb0fd107a751c148be6165aa8c2725"
+          test "$(git hash-object xdr/fixtures/known-cve.json)" = "d0f444a98e457a579fbce613012485d49936b17c"
+      - name: Verify 24 safe extracted lines
+        run: |
+          node xdr/persistence/read-alerts.mjs > /tmp/xdr04-alerts.jsonl
+          node -e 'const fs=require("node:fs");const f=JSON.parse(fs.readFileSync("xdr/fixtures/persistence.json"));const out=fs.readFileSync("/tmp/xdr04-alerts.jsonl","utf8").trim().split(/\r?\n/).map(JSON.parse);const cols=["timestamp","sourceAddress","account","ruleLevel","description"];if(f.alerts.length!==24||out.length!==24||out.some(r=>JSON.stringify(Object.keys(r))!==JSON.stringify(cols)))throw Error("XDR-04 extraction mismatch");console.log("XDR04 original=24 extracted=24");'
+      - name: XDR-04, XDR-03, and shared runner tests
+        run: node --test test/xdr-persistence.test.mjs test/xdr-known-cve.test.mjs test/xdr-run.test.mjs
+      - name: Run XDR-04 fixture runner
+        run: npm run xdr:run -- persistence
+      - name: Confirm exact reproduced result and no known normal blocks
+        run: |
+          git diff --exit-code -- xdr/persistence/result.json
+          node -e 'const fs=require("node:fs");const r=JSON.parse(fs.readFileSync("xdr/persistence/result.json"));const f=JSON.parse(fs.readFileSync("xdr/fixtures/persistence.json"));const c=r.counts;if(r.decisions.length!==24||f.alerts.length!==24||c.block!==8||c.alert!==8||c.record!==8||f.alerts.some((a,i)=>a.rule.level<=3&&r.decisions[i].action==="block"))throw Error("XDR-04 result mismatch");console.log("XDR04 verified block=8 alert=8 record=8 normalBlocked=0");'
+      - uses: actions/upload-artifact@v4
+        with:
+          name: xdr04-persistence-result
+          path: xdr/persistence/result.json
+          if-no-files-found: error

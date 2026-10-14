@@ -736,3 +736,19 @@ node --test test/step10-policy-diff.test.mjs
 - `xdr/known-cve/ztna-bridge.mjs`: 기존 `src/decider.mjs` 정책을 변경하지 않는 **교육용** 연결. 학습용 별도 sourceIp 입력이 있어야 임시 차단을 판단할 수 있음. 실제 ALEPH SDP 요청 계약에는 이 IP가 없고 `xdr_temporary_deny`는 공식 등록 응답 계약에 넣지 않았으므로, 실제 운영 자동 차단 연동이라고 주장하지 않음. 공유 IP·NAT 환경에서는 실제 운영 차단 전 추가 귀속 확인이 필요함.
 - **재실행:** 저장소 루트에서 `node xdr/known-cve/read-alerts.mjs`, `node --test test/xdr-known-cve.test.mjs`, `npm run xdr:run -- known-cve` 순서로 실행. 마지막 명령이 `xdr/known-cve/result.json`을 재생성하며 결과는 `block:8`, `alert:8`, `record:8`, 정상 이벤트 차단 0건(총 24건).
 - **증빙:** GitHub Actions 원본 경보 24=추출 24, 전체 24건 판단 결과, 정상 이벤트 오차단 0, 고확신 공격만 임시 차단, 15분 후 기존 정책 복귀, 다른 단계 회귀 테스트 성공. 학습용 시험이고 공식 보너스 심판 재평가는 별개.
+
+
+## 보너스 XDR-04: 몰래 심어진 프로그램 탐지
+
+- 입력: xdr/fixtures/persistence.json의 가상 Wazuh 경보 24건 (원본 보존).
+- 제작 1: xdr/persistence/read-alerts.mjs는 시각·출발 주소·계정·규칙 수준·설명만 출력하고 인증정보를 가립니다.
+- 제작 2~3: T1543 및 T1053 근거를 가진 xdr/persistence/patterns.json과 외부 import 없는 decide.mjs로 독립 분류합니다.
+- 제작 4: respond.mjs는 확신도 0.85 이상의 block 이벤트만 대상 Wazuh PC에 15분 격리 후보로 기록하고, 근거 경보 번호와 만료 시간을 보관합니다. xdr/alerts.log에는 인증정보·사용자·원본 경로 없이 한 줄 로그만 남깁니다.
+- ZTNA 학습 연결: ztna-bridge.mjs는 기존 src/decider.mjs 판정을 먼저 보존한 뒤에만 PC별 일시 격리를 추가합니다. 별도 검증된 Wazuh PC 식별자를 주입해야 합니다. 운영 ALEPH 엔진에 이 식별자 연결이나 거부 사유 등록이 되어 있다는 뜻은 아닙니다.
+- 제작 5: result.json은 block 8 / alert 8 / record 8, 알려진 정상 이벤트 오차단 0건입니다.
+
+재현: npm run xdr:run -- persistence
+읽기 확인: node xdr/persistence/read-alerts.mjs
+회귀: node --test test/xdr-persistence.test.mjs
+CI: .github/workflows/xdr04-persistence.yml에서 1~12단계 원본 판정기 SHA와 원본 경보 SHA를 유지하며 검사합니다. 학생 자체 검증은 공식 심판 결과와 구분합니다.
+

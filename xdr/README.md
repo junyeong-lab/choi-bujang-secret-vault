@@ -38,3 +38,16 @@ node scripts/xdr-run.mjs brute-force
 `npm run xdr:run -- brute-force` 도 같은 명령입니다. 실행기는 해당 경보마다 `decide` 를 부르고, 결과를 `xdr/<moduleKey>/result.json` 에 씁니다. 형식은 `aleph.xdr.result.v1` 이고, `decisions` 에는 경보 id·행동·확신도·이유가, `counts` 에는 `block`·`alert`·`record` 건수가 있습니다.
 
 반환 형식이 틀린 경보는 `record` 로 남고, 오류 한 줄이 출력됩니다. 실행기 자체는 네트워크를 쓰지 않습니다. 판정자는 격리된 환경에서 같은 명령을 다시 실행해 결과를 봅니다. 이미 커밋된 `result.json` 만으로 판정이 끝나지 않습니다.
+
+
+## XDR-04 persistence 완료 내용
+
+- 패턴 근거: MITRE ATT&CK T1543/T1053
+- 원본 경보 24건 / 읽은 줄 24개
+- 판단기: import/I/O 없이 0.85 이상 block, 0.5 이상 alert, 나머지 record
+- PC 격리 후보: 확인된 대상 Wazuh PC 한 곳만 15분, 근거 경보 번호·만료 시각 포함
+- 정상·애매한 이벤트는 새 격리 규칙을 만들지 않습니다.
+- 기록: xdr/alerts.log (Git 추적 제외)
+- 재생성: npm run xdr:run -- persistence
+- 결과: block 8, alert 8, record 8, 정상 이벤트 block 0
+
