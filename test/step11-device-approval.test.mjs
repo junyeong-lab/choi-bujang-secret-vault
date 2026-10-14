@@ -64,7 +64,10 @@ test('only server-side approved row and matching owner can access protected note
  const checks=[];const res={status(code){this.code=code;return this;},json(o){checks.push(o);}};
  assert.equal(await requireApprovedDevice(req,res,user,w.db),false);
  assert.equal(res.code,403);assert.deepEqual(checks[0],{error:'device_not_approved'});
- w.rows[0].status='approved'; // privileged administrator only
+ // A bare badge without operator approval timestamp cannot unlock notes.
+ w.rows[0].status='approved';
+ assert.equal(await requireApprovedDevice(req,res,user,w.db),false);
+ w.rows[0].approved_at=new Date().toISOString(); // privileged administrator only
  assert.equal(await requireApprovedDevice(req,res,user,w.db),true);
  assert.equal((await deviceSessionStatus({req,identity:identityOther,db:w.db})).approved,false);
  assert.equal(await requireApprovedDevice(req,res,identityOther,w.db),false);
@@ -92,6 +95,23 @@ test('approval parameters and mismatched login cookies do not grant device acces
    identity:user,db:w.db})).approved,false);
  assert.equal((await deviceSessionStatus({req:{headers:{cookie:'vault_session='+login+'; '+DEVICE_COOKIE+'='+handle,
    authorization:'Bearer fake.other.jwt'}},identity:user,db:w.db})).approved,false);
+});
+test('expired or future-dated approvals remain denied even with a valid device handle',async()=>{
+ const w=fake();const made=await requestDeviceRegistration({req:request(),identity:user,db:w.db});
+ const handle=made.cookie.match(new RegExp(DEVICE_COOKIE+'=([A-Za-z0-9_-]{43})'))[1];
+ const req=request(handle);
+ w.rows[0].status='approved';
+ w.rows[0].approved_at=new Date(Date.now()+60000).toISOString();
+ assert.equal((await deviceSessionStatus({req,identity:user,db:w.db})).approved,false);
+ w.rows[0].approved_at=new Date(Date.now()-60000).toISOString();
+ assert.equal((await deviceSessionStatus({req,identity:user,db:w.db})).approved,true);
+ w.rows[0].expires_at=new Date(Date.now()-1000).toISOString();
+ const expired=await deviceSessionStatus({req,identity:user,db:w.db});
+ assert.equal(expired.status,'expired');
+ assert.equal(expired.approved,false);
+ const res={status(code){this.code=code;return this;},json(){}};
+ assert.equal(await requireApprovedDevice(req,res,user,w.db),false);
+ assert.equal(res.code,403);
 });
 test('server failures do not grant access',async()=>{
  const w=fake();
