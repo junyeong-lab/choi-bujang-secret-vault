@@ -75,7 +75,8 @@ test('verified B alone is restored; other notes, old audits, and all rules are u
   assert.equal(answer.status,200);
   assert.equal(answer.body.auditRecorded,true);
   assert.equal(answer.body.ownerVerified,true);
-  assert.equal(answer.body.contentSha256,sha(original.content));
+  assert.equal(answer.body.contentSha256,original.contentSha256);
+  assert.equal(answer.body.bodySha256,sha(original.content));
   assert.equal(JSON.stringify(w.rows.filter(x=>x.id!==id)),others);
   assert.equal(JSON.stringify(w.audits[0]),oldAudit);
   assert.deepEqual(w.audits.slice(1).map(x=>x.outcome),['started','restored']);
