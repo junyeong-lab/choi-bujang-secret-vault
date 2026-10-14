@@ -29,6 +29,21 @@ test('observed API status mismatch stays mismatched',()=>{
   assert.equal(view.totals.notRun,40);
   assert.equal(view.checks[0].requestId,view.logs[0].requestId);
 });
+test('repeated checks show only the newest result in both counters and redacted log',()=>{
+  const id=OPS_CHECKS[0].attackId;
+  const earlier={attack_id:id,method:'GET',path:'/data.json',
+    expected:'HTTP 404',observed_http:404,outcome:'matched',
+    request_id:'earlier',checked_at:'2026-10-14T04:00:00Z'};
+  const latest={...earlier,observed_http:500,outcome:'mismatched',
+    request_id:'latest',checked_at:'2026-10-14T05:00:00Z'};
+  const view=buildOpsView({logs:[latest,earlier]});
+  assert.equal(view.totals.observedRows,1);
+  assert.equal(view.totals.matched,0);
+  assert.equal(view.totals.mismatched,1);
+  assert.equal(view.logs.length,1);
+  assert.equal(view.logs[0].requestId,'latest');
+  assert.equal(view.checks[0].requestId,'latest');
+});
 test('only read-only allowlisted probes and no protected HTTP response content',()=>{
  const code=source('src/ops-service.mjs');
  assert.match(code,/RUNNABLE/);
