@@ -45,6 +45,6 @@ test('room is login/device restricted and markup contains no real records',()=>{
  assert.match(html,/id="logs"/);
  assert.doesNotThrow(()=>new Script(script));
  assert.doesNotMatch(script,/localStorage|sessionStorage|indexedDB|document\.cookie/);
- assert.match(source('api/ops.mjs'),/requireApprovedDevice/);
- assert.match(source('api/ops.mjs'),/validWriteOrigin/);
+ assert.match(source('src/ops-handler.mjs'),/requireApprovedDevice/);
+ assert.match(source('src/ops-handler.mjs'),/validWriteOrigin/);
 });
