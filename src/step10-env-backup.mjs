@@ -140,8 +140,8 @@ export async function restoreFromEnv({
     return {status:200,body:{
       status:'restored',id,memoId:id,ownerId,ownerVerified:true,
       ownerMatched:true,restored:true,applied:true,
-      created:!current,contentSha256:memo.contentSha256,
-      backupVerified:true,auditRecorded:true
+      created:!current,contentSha256:memo.claimedHash,contentHash:memo.claimedHash,
+      bodySha256:memo.contentSha256,backupVerified:true,auditRecorded:true
     }};
   }catch{return deny(502,'upstream_unavailable');}
 }
