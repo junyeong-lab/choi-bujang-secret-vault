@@ -27,9 +27,13 @@ export async function deviceDb({origin,secret,transport=fetch},resource,{method=
   const table=resource==='consume'?'rpc/step11_consume_challenge':DOMAIN+resource;
   const url=new URL('/rest/v1/'+table,safeOrigin(origin));
   for(const [name,value] of Object.entries(params))url.searchParams.set(name,String(value));
+  const headers=apiKeyHeaders(secret,body!==undefined);
+  // Repeated passkey checks renew this login's server-side approval.
+  if(resource==='sessions'&&method==='POST'&&params.on_conflict==='session_sha256')
+    headers.Prefer='resolution=merge-duplicates,return=representation';
   const response=await transport(url,{
     method,
-    headers:apiKeyHeaders(secret,body!==undefined),
+    headers,
     ...(body===undefined?{}:{body:JSON.stringify(body)}),
     cache:'no-store',redirect:'error',signal:AbortSignal.timeout(8000)
   });
@@ -191,7 +195,8 @@ export async function verifyFinish({req,identity,db,appOrigin,body}){
     status:'eq.approved',sign_count:'eq.'+current.sign_count
   },body:{sign_count:result.signCount,last_verified_at:new Date().toISOString()}});
   if(!Array.isArray(updated)||updated.length!==1)throw Error('device_counter_changed');
-  const record=await deviceDb(db,'sessions',{method:'POST',body:{
+  const record=await deviceDb(db,'sessions',{method:'POST',
+    params:{on_conflict:'session_sha256'},body:{
     owner_id:identity.userId,credential_row_id:current.id,
     session_sha256:boundLogin,
     expires_at:new Date(Date.now()+TTL_MS).toISOString()
