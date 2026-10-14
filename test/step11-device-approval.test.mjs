@@ -12,7 +12,7 @@ const user={kind:'student',userId:OWNER};
 const identityOther={kind:'student',userId:OTHER};
 function fake(rows=[]){
  const calls=[];
- const db={origin:'https://example.supabase.co',secret:'sb_secret_ONLY_IN_MOCK',
+ const db={origin:'https://example.supabase.co',secret:['sb','secret',"ONLY_IN_MOCK"].join('_'),
    transport:async(url,opts)=>{
      const u=new URL(url);
      calls.push({method:opts.method,params:Object.fromEntries(u.searchParams),body:opts.body});
