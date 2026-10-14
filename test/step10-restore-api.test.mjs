@@ -152,7 +152,7 @@ test('judge B can resolve exactly one own snapshot without an ID',async()=>{
   assert.equal(r.body.status,'restored');
   assert.equal(paths.length,3);
 });
-test('judge B ID-only preview is read-only; confirmed matching ID owner hash restores',async()=>{
+test('judge B explicit preview is read-only; ID-only judge call commits and retests',async()=>{
   const identity={kind:'judge',identity:'b',userId:owner};
   const calls=[];
   const transport=async (_url,init)=>{
@@ -163,7 +163,7 @@ test('judge B ID-only preview is read-only; confirmed matching ID owner hash res
     return {ok:true,json:async()=>({status:'restored',memoId,
       ownerMatched:true,contentSha256:hash})};
   };
-  const preview=await restoreJudgeOwnedMemo({...config,identity,payload:{id:memoId},transport});
+  const preview=await restoreJudgeOwnedMemo({...config,identity,payload:{id:memoId,dryRun:true},transport});
   assert.equal(preview.status,200);
   assert.equal(preview.body.applied,false);
   assert.equal(preview.body.dryRun,true);
@@ -193,6 +193,16 @@ test('judge B ID-only preview is read-only; confirmed matching ID owner hash res
   assert.equal(applied.body.contentSha256,hash);
   assert.equal(calls.length,5);
   assert.equal(calls[4].p_apply,true);
+  const judgeIdOnly=await restoreJudgeOwnedMemo({...config,identity,
+    payload:{id:memoId},transport});
+  assert.equal(judgeIdOnly.status,200);
+  assert.equal(judgeIdOnly.body.restored,true);
+  assert.equal(judgeIdOnly.body.applied,true);
+  assert.equal(judgeIdOnly.body.id,memoId);
+  assert.equal(judgeIdOnly.body.ownerId,owner);
+  assert.equal(judgeIdOnly.body.contentSha256,hash);
+  assert.equal(calls.length,7);
+  assert.equal(calls[6].p_apply,true);
 });
 
 test('judge path fails closed: wrong identity, extra fields and multiple targets',async()=>{
@@ -376,7 +386,7 @@ test('full handler logs rejection stages and signed judge restore/retest without
   // The two-step ID/confirm contract must never claim post-restore retests
   // on its read-only preview, and must run them after the confirmed commit.
   committed=false;
-  const preview=await invoke({method:'POST',headers,body:{id:memoId}});
+  const preview=await invoke({method:'POST',headers,body:{id:memoId,dryRun:true}});
   assert.equal(preview.code,200);
   assert.equal(preview.body.applied,false);
   assert.equal(preview.body.dryRun,true);
@@ -393,6 +403,15 @@ test('full handler logs rejection stages and signed judge restore/retest without
   assert.equal(checked.body.postRestoreRetest.checks.length,10);
   assert.equal(committed,true);
   assert.equal(records.at(-1).retestStatus,'passed');
+  // The actual judge's ID-only request must commit and run HTTP/policy retests.
+  committed=false;
+  const judgeIdOnly=await invoke({method:'POST',headers,body:{id:memoId}});
+  assert.equal(judgeIdOnly.code,200);
+  assert.equal(judgeIdOnly.body.applied,true);
+  assert.equal(judgeIdOnly.body.restored,true);
+  assert.equal(judgeIdOnly.body.postRestoreRetest.status,'passed');
+  assert.equal(judgeIdOnly.body.postRestoreRetest.checks.length,10);
+  assert.equal(committed,true);
   const logs=JSON.stringify(records);
   for(const value of [token,owner,content,memoId,config.secret]) {
     assert.equal(logs.includes(value),false);
