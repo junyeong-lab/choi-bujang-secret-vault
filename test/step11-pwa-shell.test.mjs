@@ -49,8 +49,13 @@ test('offline service worker cannot cache or replace protected API responses',()
   assert.deepEqual(JSON.parse(JSON.stringify(manifest.icons.map(x=>x.src))).length,3);
   assert.match(sw,/startsWith\('\/api\/'\)/u);
   assert.match(sw,/event\.request\.mode !== 'navigate'/u);
-  assert.match(sw,/const PUBLIC_FILES = \['\/offline\.html', '\/app-icon\.svg'\]/u);
-  assert.doesNotMatch(sw,/caches\.open\([^\n]*api\//u);
+  assert.match(sw,/const OFFLINE_HTML = /u);
+  assert.match(sw,/new Response\(OFFLINE_HTML/u);
+  // Purge old cache entries, but do not write anything back to browser storage.
+  assert.match(sw,/caches\.delete\(key\)/u);
+  assert.doesNotMatch(sw,/caches\.(?:open|match)/u);
+  assert.doesNotMatch(sw,/\b(?:cache\.put|cache\.add|cache\.addAll)\(/u);
+  assert.match(sw,/Cache-Control': 'no-store'/u);
   assert.match(offline,/오프라인에서 메모나 인증 정보를 제공하지 않습니다/u);
   assert.doesNotMatch(offline,/(?:localStorage|sessionStorage|indexedDB)/u);
 });
