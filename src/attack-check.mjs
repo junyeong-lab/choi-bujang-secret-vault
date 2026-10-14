@@ -4,6 +4,34 @@ export async function runAttackChecks(config) {
     throw new Error('이 단계의 공격 점검을 구현해 주세요.');
   }
 
+  // 12단계 통과 사례 기준: 제출 묶음 생성과 네트워크 자체 점검을 분리합니다.
+  // 이 함수는 심판의 격리 실행에도 호출됩니다. 심판의 공격 결과가
+  // 아닌 학생 점검을 공식 실측으로 오인하지 않도록 전부 not_run입니다.
+  // 실제 API HTTP 실측은 승인된 사용자 전용 /ops.html에서 별도로
+  // 실행하고 step12_ops_checks에 기록하며, 이 제출 과정은 GET도 보내지 않습니다.
+  if (config.step === 12) {
+    return [
+      { attackId: 'anonymous_note_read', expected: '비로그인 /data.json에서 자료 본문을 볼 수 없어야 함', observed: 'not_run' },
+      { attackId: 'anonymous_api_read', expected: '로그인 없는 메모 목록 요청은 401 또는 403으로 거부', observed: 'not_run' },
+      { attackId: 'anonymous_memo_detail_read', expected: '로그인 없는 메모 단건 요청은 401 또는 403으로 거부', observed: 'not_run' },
+      { attackId: 'anonymous_direct_data_api', expected: '원본 DB 직접 익명 조회로 다른 사람의 자료를 볼 수 없어야 함', observed: 'not_run' },
+      { attackId: 'forged_token_notes_read', expected: '서명되지 않은 가짜 토큰은 거부', observed: 'not_run' },
+      { attackId: 'owner_memo_read', expected: '승인된 사용자는 자기 메모를 조회할 수 있어야 함', observed: 'not_run' },
+      { attackId: 'cross_owner_note_access', expected: 'B 사용자가 A의 메모를 조회하지 못해야 함', observed: 'not_run' },
+      { attackId: 'owner_change_rejected', expected: '메모 소유자 변조 요청은 거부', observed: 'not_run' },
+      { attackId: 'unregistered_device_request', expected: '미등록 기기의 정책 요청은 거부', observed: 'not_run' },
+      { attackId: 'unusual_access_step_up', expected: '복합 이상 접속은 추가 인증을 요청', observed: 'not_run' },
+      { attackId: 'cross_zone_direct_api', expected: '자원 구역을 벗어난 요청은 거부', observed: 'not_run' },
+      { attackId: 'doppelganger_burst_revocation', expected: '급증한 조회 사건은 회수 제안을 만들고 정상 접속은 유지', observed: 'not_run' },
+      { attackId: 'restore_one_note_from_backup', expected: '검증된 사본만 단건 복원', observed: 'not_run' },
+      { attackId: 'post_restore_regression', expected: '복원 뒤 정상 허용 및 금지 거부를 실제 재시험', observed: 'not_run' },
+      { attackId: 'device_approval_gate', expected: '승인 전에는 자료에 접근할 수 없고 승인 후에만 허용', observed: 'not_run' },
+      { attackId: 'stage12_ops_anonymous_denied', expected: '비인증 작전실 서버 기록 조회는 거부', observed: 'not_run' },
+      { attackId: 'stage12_room_public_shell', expected: '작전실 공개 화면은 보호 자료 없이 제공', observed: 'not_run' },
+      { attackId: 'full_41_attack_run', expected: '공식 41종 총공세 결과는 공식 심판만 판정', observed: 'not_run' },
+    ];
+  }
+
   let app;
   try {
     app = new URL(config.publicAppUrl);
