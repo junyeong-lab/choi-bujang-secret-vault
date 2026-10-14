@@ -585,3 +585,29 @@ node --test test/step10-policy-diff.test.mjs
 - 복원 후 실제 HTTP 정상/금지 요청 4개와 정책·탐지 검사 6개를 실행하여 결과를 `postRestoreRetest`와 `restore.retests`에 기록합니다. 미실행/실패를 성공으로 표시하지 않습니다.
 - 이전 기준 커밋 `30684df933b9fd5be106a185d6dbfd44dcebf394`, 보존 브랜치 `step10-pre-env-restore-20261014`.
 - 격리 환경 변수명과 JSON 구조는 합격 후기에서 가져온 호환성 가설이며 공식 공개 명세로 확인되지 않았습니다. 자동 테스트의 모의 통과는 ALEPH 공식 합격이나 운영 DB 실제 복원을 증명하지 않습니다.
+
+
+## 11단계 — 설치형 접속 앱과 서버 기기 승인 (2026-10-14)
+
+### 이전 합격 저장점과 이어받기
+- 10단계 공식 심판 **100/100**: 학생이 2026-10-14 제출 이후 채팅으로 직접 결과를 확인했습니다. 10단계 당시 합격 커밋 `ae769c8ebba7e0a7c3cf8fa2d29ef3c2bc85af27`. 이전 문서의 "공식 심판 미확인" 표기는 해당 평가 전 기록입니다.
+- 11단계 제작 2 착수 직전 복구 브랜치: `step11-pre-device-approval-20261014`, 커밋 `84437df736c72ec23f59afc5be7c9dc203ba87cd`. 앞 단계의 메모·공지, 복원, 정책·탐지 코드는 보존합니다.
+
+### 제작 1 — PWA 외형
+- `public/manifest.webmanifest`, 192/512 아이콘, 공개 오프라인 안내, 공개 파일만 캐시하는 서비스 워커, 설치 형태 표시 구현.
+- PWA 설치 여부로 등록·승인 여부를 판단하지 않습니다. 오프라인에서 기기·메모 데이터를 제공하지 않습니다.
+
+### 제작 2 — 실제 승인 전 자료 차단
+- 로그인 후 `GET /api/device`로 상태 확인. 미등록·대기·검증 필요·승인 상태를 화면에서 구분합니다.
+- `POST /api/device`의 `register-options` → 브라우저 WebAuthn `navigator.credentials.create()` → `register-finish`은 서버에 **pending** 자격 증명만 등록합니다. 등록 버튼은 절대로 승인하지 않습니다.
+- 별도 신뢰 관리자/교사가 `public.step11_device_credentials`에서 요청자·사용 기기를 대면 확인한 뒤 `status='approved'`로 승인을 부여해야 합니다. 해당 권한은 공개 API·브라우저에 없습니다. 실제 운영 승인 절차는 관리자 확인 전까지 미실행입니다.
+- 승인된 뒤 `verify-options` → `navigator.credentials.get()` → `verify-finish`이 5분짜리 일회용 서버 챌린지, RP ID, 정확한 출처, authenticator 서명 및 사용자 확인을 검증합니다. 그 후에만 서버가 15분 기기 확인 세션을 발행합니다. 기기 개인키는 WebAuthn 인증기에서 관리하고 앱 JavaScript·localStorage·sessionStorage·IndexedDB에는 저장하지 않습니다. 확인 세션은 서버에 SHA-256으로 저장하며 브라우저에는 HttpOnly Secure SameSite=Strict 쿠키만 설정합니다.
+- 메모 목록/상세/추가/수정/삭제, 공지 읽기/쓰기에 **서버 미확인 기기는 403**을 반환합니다. 단순 로그인이나 PWA 설치는 접근 권한이 아닙니다. 기존 ALEPH 1~10단계의 서명 검증된 judge 요청 경로는 별도로 유지합니다.
+- 서버 DB 구조: `supabase/step11-devices.sql`, `step11_device_credentials`, `step11_device_challenges`, `step11_device_sessions`. 익명·일반 사용자 직접 테이블 접근을 차단하고, 승인·취소 권한은 관리자에만 둡니다.
+- 기기 승인 구현은 **웹 인증기 자격 증명을 서버의 승인 목록에 연결**합니다. WebAuthn attestation 형식 `none`만 허용하므로 회사 소유·관리 기기라는 하드웨어 증명까지 구현한 것은 아닙니다. 신뢰 관리자 확인이 추가로 필요합니다.
+
+### 11단계 테스트와 남길 증빙
+- `node --test test/step11-pwa-shell.test.mjs test/step11-device-approval.test.mjs`: PWA 형식, 기기 상태 UI, 진짜 테스트 서명 검증, 위조 쿠키 거부, 관리자 승인 전·후 DB 가상 응답 확인.
+- GitHub Actions에서 `npm ci`, `npm install`, 1~10단계 회귀 검사, `npm run bundle`을 실행합니다. 이는 모의 서명과 가짜 DB를 포함하는 자동 검사이며 실제 사용자의 물리 기기 승인이나 ALEPH 심판의 11단계 통과를 뜻하지 않습니다.
+- 직접 확인할 증빙: 등록 버튼 뒤 `pending`과 메모 비표시, 비승인 API `403`; 신뢰 관리자 승인 뒤 WebAuthn 재확인 및 실제 메모 `200` (동일 계정으로만), 타 소유자 접근 거부.
+- 관리자 대면 확인이나 실제 운영 기기 등록을 수행하기 전에는 `approved`를 임의로 만들지 않습니다. 토큰, 비밀번호, 자격 증명 개인키, 메모 내용은 공개 저장소나 제출 묶음에 넣지 않습니다.
