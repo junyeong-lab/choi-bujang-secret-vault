@@ -1,3 +1,4 @@
+import {requireApprovedDevice} from '../../src/device-approval.mjs';
 import { readFileSync } from 'node:fs';
 import { createLoginVerifier } from '../../src/verify-login.mjs';
 
@@ -63,6 +64,7 @@ export default async function handler(req, res) {
   const state = await authenticate(req, res);
   if (!state) return;
   const { endpoint, secret } = state;
+  if (!await requireApprovedDevice(req,res,state.identity,{origin:process.env.SUPABASE_URL,secret})) return;
 
 if (['PUT', 'DELETE'].includes(req.method) && !req.headers.authorization) {
   let validOrigin = false;
