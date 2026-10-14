@@ -1,6 +1,6 @@
 // Do not return tokens, private keys, or note bodies.
 export async function runAttackChecks(config) {
-  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11].includes(config.step)) {
+  if (![1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].includes(config.step)) {
     throw new Error('이 단계의 공격 점검을 구현해 주세요.');
   }
 
@@ -103,7 +103,7 @@ export async function runAttackChecks(config) {
   const detailResponse = await request('/api/memos/00000000-0000-4000-8000-000000000000');
   const detailObserved = await checkDenied(detailResponse, '단건 조회');
 
-  if (config.step === 4 || config.step === 5 || config.step === 6 || config.step === 7 || config.step === 8 || config.step === 9 || config.step === 10 || config.step === 11) {
+  if (config.step === 4 || config.step === 5 || config.step === 6 || config.step === 7 || config.step === 8 || config.step === 9 || config.step === 10 || config.step === 11 || config.step === 12) {
 const dbUrl = config.step >= 5
   ? new URL(config.originalApiUrl)
   : new URL(
@@ -126,7 +126,7 @@ const dbUrl = config.step >= 5
       );
     }
 
-    return [
+    const results = [
       staticCheck,
       {
         attackId: 'anonymous_api_read',
@@ -144,6 +144,22 @@ const dbUrl = config.step >= 5
         observed: `직접 Data API 요청 거부 (HTTP ${dbResponse.status})`,
       },
     ];
+    if(config.step >= 12){
+      const ops=await request('/api/ops');
+      const result=await checkDenied(ops,'작전실 무단 접근');
+      const page=await request('/ops.html');
+      results.push({
+        attackId:'stage12_ops_anonymous_denied',
+        expected:'로그인 없는 작전실 API 접근 거부',
+        observed:result
+      },{
+        attackId:'stage12_room_public_shell',
+        expected:'탈환 작전실 공개 껍데기 HTTP 200 (실제 내역은 인증 후 표시)',
+        observed:'HTTP '+page.status+' (공개 화면·실제 서버 자료는 분리)'
+      });
+      await page.body?.cancel();
+    }
+    return results;
   }
 
   return [
