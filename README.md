@@ -724,3 +724,15 @@ node --test test/step10-policy-diff.test.mjs
 - 승인된 네트워크 호출은 HTTPS GET 1건(공개 커밋 파일 목록 조회)이며, 출처와 응답 SHA를 검증함. 보안 자료·토큰·환경변수·메모 본문 전송 또는 출력 없음. 기존 src/attack-check.mjs의 12단계 18개 not_run 및 별도 /ops.html 실측 기록은 보존.
 - 전체 번들 엔트리포인트를 별도 Node에서 실행하는 test/step12-bundle-end-to-end.test.mjs 및 test/helpers/bundle-command-guard.cjs에서 모든 자식 프로세스를 금지하고 허용된 단일 GitHub GET만 남았는지 검증. 생성된 제출 JSON의 commit과 changedFiles를 실제 git 기록과 대조. 일반 npm install 및 이전 단계 회귀 테스트도 CI에서 수행.
 - 재평가 전에는 공식 12단계 통과를 주장하지 않음. 실패가 다시 발생하면 동일 코드가 아닌 다음 심판 오류를 우선 조사.
+
+
+## 보너스 XDR-03 — 알려진 CVE 악용 탐지 (2026-10-14)
+
+- **보존 기준:** 12단계 공식 심판 100점(학생 확인) 합격 브랜치 `step12-100-pass-20261014` 및 커밋 `40ae4ffeaefd09455fee16edd00719e8c36e4c5e`; `src/decider.mjs`, 기존 인증·복원·DB 및 XDR-01·02를 수정하지 않음.
+- 원본 경보: `xdr/fixtures/known-cve.json` (24건, 변경 없음). `xdr/known-cve/read-alerts.mjs`가 시각·출발 주소·계정·규칙 수준·설명만 추출하고 출력에서 비밀값으로 보이는 문자열을 가림. 원본 24건 = 추출 24줄로 검증.
+- `xdr/known-cve/patterns.json`: CVE-2021-44228 및 MITRE ATT&CK T1190 근거를 가진 4개 패턴(완결된 JNDI 원격 조회, CVE 점검 정황, 불완전 조회 징후, 스캐너·라이브러리 점검 정황).
+- `xdr/known-cve/decide.mjs`: 패턴 목록을 파일 상단에 상수로 고정한 독립 순수 함수 `decide(alert)`. 외부 import·파일·네트워크·상태 변경 없음. URL·User-Agent의 명시적 JNDI 원격 조회 표현식과 경보 수준이 확인된 요청에만 `block`(확신도 0.85 이상), 모호한 단서는 `alert`(0.5 이상 0.85 미만), 정상 이벤트는 `record`(0.5 미만). 설명 텍스트의 CVE 이름 또는 Wazuh 수준만으로 차단하지 않음.
+- `xdr/known-cve/respond.mjs`: 명확한 악용 판정만 15분짜리 임시 차단 후보로 등록하고 경보 ID·만료 시각을 포함. `xdr/alerts.log`에는 ID·행동·확신도·근거명만 추가 기록하며 파일은 Git 제외. 원본 요청 문자열·계정·토큰·메모 본문은 로그에 남기지 않음.
+- `xdr/known-cve/ztna-bridge.mjs`: 기존 `src/decider.mjs` 정책을 변경하지 않는 **교육용** 연결. 학습용 별도 sourceIp 입력이 있어야 임시 차단을 판단할 수 있음. 실제 ALEPH SDP 요청 계약에는 이 IP가 없고 `xdr_temporary_deny`는 공식 등록 응답 계약에 넣지 않았으므로, 실제 운영 자동 차단 연동이라고 주장하지 않음. 공유 IP·NAT 환경에서는 실제 운영 차단 전 추가 귀속 확인이 필요함.
+- **재실행:** 저장소 루트에서 `node xdr/known-cve/read-alerts.mjs`, `node --test test/xdr-known-cve.test.mjs`, `npm run xdr:run -- known-cve` 순서로 실행. 마지막 명령이 `xdr/known-cve/result.json`을 재생성하며 결과는 `block:8`, `alert:8`, `record:8`, 정상 이벤트 차단 0건(총 24건).
+- **증빙:** GitHub Actions 원본 경보 24=추출 24, 전체 24건 판단 결과, 정상 이벤트 오차단 0, 고확신 공격만 임시 차단, 15분 후 기존 정책 복귀, 다른 단계 회귀 테스트 성공. 학습용 시험이고 공식 보너스 심판 재평가는 별개.
