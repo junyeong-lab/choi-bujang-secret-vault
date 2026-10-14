@@ -14,6 +14,7 @@ const req=token=>({headers:{cookie:'vault_session='+token}});
 test('no device key or additional device cookie gets into served JS or responses',()=>{
   const app=load('public/index.html');
   const api=load('api/device.mjs');
+  const sessionApi=load('api/auth/session.mjs');
   const server=load('src/device-approval.mjs');
   const worker=load('public/sw.js');
   assert.match(app,/navigator\.credentials\.get/u);
@@ -21,6 +22,7 @@ test('no device key or additional device cookie gets into served JS or responses
   assert.doesNotMatch(app,/\b(?:BEGIN .*PRIVATE KEY|deviceSessionCookie)\b/u);
   assert.doesNotMatch(api,/Set-Cookie/u);
   assert.doesNotMatch(api,/result\.cookie/u);
+  assert.match(sessionApi,/vault_device=; HttpOnly; Secure; SameSite=Strict; Path=\/api; Max-Age=0/u);
   assert.doesNotMatch(server,/deviceSessionCookie/u);
   assert.doesNotMatch(server,/vault_device/u);
   assert.match(worker,/startsWith\('\/api\/'\)/u);
