@@ -39,6 +39,8 @@ jobs:
         run: npm run test:r5
       - name: 11 PWA shell, unverified device display and public-only offline cache
         run: node --test test/step11-pwa-shell.test.mjs
+      - name: 11 WebAuthn signature and server-approved device access
+        run: node --test test/step11-device-approval.test.mjs
       - name: 6-8 device, anomaly, resource-zone policy regression
         run: |
           npm run decider:test
