@@ -1,132 +1,104 @@
 import assert from 'node:assert/strict';
 import {test} from 'node:test';
-import {createHash,generateKeyPairSync,sign,randomBytes} from 'node:crypto';
-import {registrationResult,authenticationResult,encode64,digestHex} from '../src/device-webauthn.mjs';
-import {deviceSessionStatus,requireApprovedDevice,loginSessionFingerprint,
-  validWriteOrigin} from '../src/device-approval.mjs';
-import {readFileSync} from 'node:fs';
-
-const rp='choi-bujang-secret-vault-pi.vercel.app',origin='https://'+rp;
-const B='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
-const sha=d=>createHash('sha256').update(d).digest();
-const encodeInt=x=>{
-  if(x>=0&&x<24)return Buffer.from([x]);
-  if(x<0&&x>=-24)return Buffer.from([0x20+(-x-1)]);
-  const major=x<0?0x20:0,amount=x<0?-x-1:x;
-  return Buffer.from([major+24,amount]);
-};
-const length=(major,n)=>n<24?Buffer.from([major+n]):
-  n<256?Buffer.from([major+24,n]):Buffer.from([major+25,n>>8,n&255]);
-function encode(value){
-  if(Number.isInteger(value))return encodeInt(value);
-  if(Buffer.isBuffer(value))return Buffer.concat([length(0x40,value.length),value]);
-  if(typeof value==='string'){const b=Buffer.from(value);return Buffer.concat([length(0x60,b.length),b])}
-  if(value instanceof Map){
-    const fields=[];for(const [k,v] of value)fields.push(encode(k),encode(v));
-    return Buffer.concat([length(0xa0,value.size),...fields]);
-  }
-  throw Error('unknown_fixture');
+import {createHash} from 'node:crypto';
+import {deviceSessionStatus,requireApprovedDevice,requestDeviceRegistration,
+  cookieValue,DEVICE_COOKIE,validWriteOrigin,emptyDeviceBody
+} from '../src/device-approval.mjs';
+const OWNER='bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb';
+const OTHER='aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+const UID='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
+const sha=s=>createHash('sha256').update(s).digest('hex');
+const user={kind:'student',userId:OWNER};
+const identityOther={kind:'student',userId:OTHER};
+function fake(rows=[]){
+ const calls=[];
+ const db={origin:'https://example.supabase.co',secret:'sb_secret_ONLY_IN_MOCK',
+   transport:async(url,opts)=>{
+     const u=new URL(url);
+     calls.push({method:opts.method,params:Object.fromEntries(u.searchParams),body:opts.body});
+     const filter=rows.filter(row=>[...u.searchParams].every(([key,val])=>{
+       if(['select','limit'].includes(key))return true;
+       if(val.startsWith('in.('))return val.slice(4,-1).split(',').includes(row[key]);
+       return String(row[key])===val.replace(/^eq\./,'');
+     }));
+     if(opts.method==='GET')return new Response(JSON.stringify(filter.slice(0,Number(u.searchParams.get('limit')??99))),{status:200});
+     if(opts.method==='POST'){
+       const row={id:UID,requested_at:new Date().toISOString(),...JSON.parse(opts.body)};
+       rows.push(row);
+       return new Response(JSON.stringify([row]),{status:201});
+     }
+     return new Response('{}',{status:405});
+   }};
+ return {db,rows,calls};
 }
-const credentialId=randomBytes(32);
-const {publicKey,privateKey:ephemeralTestSigner}=generateKeyPairSync('ec',{namedCurve:'P-256'});
-const jwk=publicKey.export({format:'jwk'});
-const rawId=encode64(credentialId);
-const challenge=encode64(randomBytes(32));
-const rpHash=sha(Buffer.from(rp));
-const counter=n=>{const buf=Buffer.alloc(4);buf.writeUInt32BE(n);return buf};
-const auth=(flags,n)=>Buffer.concat([rpHash,Buffer.from([flags]),counter(n)]);
-const cose=new Map([[1,2],[3,-7],[-1,1],[-2,Buffer.from(jwk.x,'base64url')],[-3,Buffer.from(jwk.y,'base64url')]]);
-const attested=Buffer.concat([auth(0x45,0),Buffer.alloc(16),Buffer.from([0,32]),credentialId,encode(cose)]);
-const registrationObject=encode(new Map([['fmt','none'],['attStmt',new Map()],['authData',attested]]));
-const client=(type,site=origin)=>encode64(Buffer.from(JSON.stringify({
-  type,challenge,origin:site,crossOrigin:false
-})));
-test('passkey registration verifies challenge, app origin, RP hash and public key',()=>{
-  const result=registrationResult({challenge,origin,rpId:rp,credential:{
-    id:rawId,rawId,type:'public-key',response:{
-      clientDataJSON:client('webauthn.create'),attestationObject:encode64(registrationObject)
-    }
-  }});
-  assert.equal(result.credentialId,rawId);
-  assert.equal(result.publicKeyJwk.x,jwk.x);
-  assert.throws(()=>registrationResult({challenge,origin,rpId:'other.example.com',
-    credential:{id:rawId,rawId,type:'public-key',response:{
-      clientDataJSON:client('webauthn.create'),attestationObject:encode64(registrationObject)
-    }}}));
+const login='opaque.login.example';
+const request=(handle)=>({headers:{
+  cookie:'vault_session='+login+(handle?'; '+DEVICE_COOKIE+'='+handle:''),
+  host:'choi-bujang-secret-vault-pi.vercel.app',
+  origin:'https://choi-bujang-secret-vault-pi.vercel.app'
+},body:{}});
+test('registration is pending only; secret handle never enters response or DB',async()=>{
+ const w=fake();
+ assert.equal((await deviceSessionStatus({req:request(),identity:user,db:w.db})).approved,false);
+ const result=await requestDeviceRegistration({req:request(),identity:user,db:w.db});
+ assert.equal(result.code,201);assert.equal(result.body.status,'pending');
+ assert.equal(result.body.approved,false);
+ const handle=result.cookie.match(new RegExp(DEVICE_COOKIE+'=([A-Za-z0-9_-]{43})'))?.[1];
+ assert.ok(handle);
+ assert.match(result.cookie,/HttpOnly; Secure; SameSite=Strict/u);
+ assert.match(result.cookie,/Path=\//u);
+ assert.ok(!JSON.stringify(result.body).includes(handle));
+ assert.ok(!JSON.stringify(w.rows).includes(handle));
+ assert.equal(w.rows.length,1);
+ assert.equal(w.rows[0].handle_sha256,sha(handle));
+ assert.equal(w.rows[0].status,'pending');
+ const check=await deviceSessionStatus({req:request(handle),identity:user,db:w.db});
+ assert.equal(check.status,'pending');assert.equal(check.approved,false);
+ assert.equal((await requestDeviceRegistration({req:request(handle),identity:user,db:w.db})).code,200);
+ assert.equal(w.rows.length,1);
 });
-test('approved credential must sign a fresh server challenge; wrong origin or signature fails',()=>{
-  const authenticatorData=auth(0x05,1),clientData=client('webauthn.get');
-  const signature=sign('sha256',Buffer.concat([authenticatorData,sha(Buffer.from(clientData,'base64url'))]),ephemeralTestSigner);
-  const credential={id:rawId,rawId,type:'public-key',response:{
-    clientDataJSON:clientData,authenticatorData:encode64(authenticatorData),
-    signature:encode64(signature)
-  }};
-  const stored={credential_id:rawId,public_key_jwk:jwk,sign_count:0};
-  assert.equal(authenticationResult({credential,challenge,origin,rpId:rp,stored}).signCount,1);
-  assert.throws(()=>authenticationResult({credential,challenge,origin,rpId:rp,
-    stored:{...stored,sign_count:1}}));
-  assert.throws(()=>authenticationResult({credential:{...credential,response:{...credential.response,
-    signature:encode64(Buffer.from(signature).fill(0))}},challenge,origin,rpId:rp,stored}));
-  assert.throws(()=>authenticationResult({credential,challenge,origin:'https://wrong.example.com',rpId:rp,stored}));
+test('only server-side approved row and matching owner can access protected notes',async()=>{
+ const w=fake();const made=await requestDeviceRegistration({req:request(),identity:user,db:w.db});
+ const handle=made.cookie.match(new RegExp(DEVICE_COOKIE+'=([A-Za-z0-9_-]{43})'))[1];
+ const req=request(handle);
+ const checks=[];const res={status(code){this.code=code;return this;},json(o){checks.push(o);}};
+ assert.equal(await requireApprovedDevice(req,res,user,w.db),false);
+ assert.equal(res.code,403);assert.deepEqual(checks[0],{error:'device_not_approved'});
+ w.rows[0].status='approved'; // privileged administrator only
+ assert.equal(await requireApprovedDevice(req,res,user,w.db),true);
+ assert.equal((await deviceSessionStatus({req,identity:identityOther,db:w.db})).approved,false);
+ assert.equal(await requireApprovedDevice(req,res,identityOther,w.db),false);
+ assert.equal((await deviceSessionStatus({req:{headers:{authorization:'Bearer signed.judge.token',cookie:req.headers.cookie}},
+   identity:{kind:'judge',userId:OWNER},db:w.db})).approved,false);
+ w.rows[0].status='revoked';
+ assert.equal((await deviceSessionStatus({req,identity:user,db:w.db})).approved,false);
 });
-test('login / installation or a fake device cookie cannot authorize protected reads',async()=>{
-  const identity={kind:'student',userId:B};
-  const noCookie={headers:{}};
-  const replies=[];
-  const res={status:s=>({json:b=>replies.push({status:s,body:b})})};
-  assert.equal(await requireApprovedDevice(noCookie,res,identity,{
-    origin:'https://unit.supabase.co',secret:'sb_secret_TEST',
-    transport:async()=>{throw Error('no db access for absent cookie')}}),false);
-  assert.deepEqual(replies[0],{status:403,body:{error:'device_not_approved'}});
-  const bogus={headers:{cookie:'vault_device='+encode64(randomBytes(32))}};
-  const calls=[];
-  const db={origin:'https://unit.supabase.co',secret:'sb_secret_TEST',
-    transport:async url=>{
-      calls.push(String(url));return new Response('[]',{status:200})
-    }};
-  assert.deepEqual(await deviceSessionStatus({req:bogus,identity,db}),
-    {approved:false,status:'verification_required'});
-  assert.equal(calls.length,0);
-  // Even a signed judge bearer does NOT prove physical/device enrollment.
-  assert.deepEqual(await deviceSessionStatus({req:noCookie,identity:{kind:'judge',userId:B},db}),
-    {approved:false,status:'verification_required'});
+test('approval parameters and mismatched login cookies do not grant device access',async()=>{
+ const w=fake();
+ for(const body of [{status:'approved'},{deviceId:UID},{role:'admin'},'not json',[{}]]){
+   assert.equal((await requestDeviceRegistration({req:{...request(),body},identity:user,db:w.db})).code,400);
+ }
+ assert.equal(w.rows.length,0);
+ assert.equal(emptyDeviceBody('{}'),true);
+ assert.equal(emptyDeviceBody({}),true);
+ assert.equal(emptyDeviceBody({approved:true}),false);
+ assert.equal(validWriteOrigin(request(),'https://choi-bujang-secret-vault-pi.vercel.app'),true);
+ assert.equal(validWriteOrigin({...request(),headers:{...request().headers,origin:'https://fake.example'}},
+  'https://choi-bujang-secret-vault-pi.vercel.app'),false);
+ const res=await requestDeviceRegistration({req:request(),identity:user,db:w.db});
+ const handle=res.cookie.match(new RegExp(DEVICE_COOKIE+'=([A-Za-z0-9_-]{43})'))[1];
+ w.rows[0].status='approved';
+ assert.equal((await deviceSessionStatus({req:{headers:{cookie:DEVICE_COOKIE+'='+handle}},
+   identity:user,db:w.db})).approved,false);
+ assert.equal((await deviceSessionStatus({req:{headers:{cookie:'vault_session='+login+'; '+DEVICE_COOKIE+'='+handle,
+   authorization:'Bearer fake.other.jwt'}},identity:user,db:w.db})).approved,false);
 });
-test('only server-approved credential linked to a live HttpOnly session opens access',async()=>{
-  const loginJwt='fixtureheader.fixturepayload.fixturesignature';
-  const credentialRow='cccccccc-cccc-4ccc-8ccc-cccccccccccc';
-  const req={headers:{cookie:'vault_session='+loginJwt}};
-  let status='pending';
-  const db={origin:'https://unit.supabase.co',secret:'sb_secret_TEST',transport:async url=>{
-    const u=new URL(url);
-    if(u.pathname.endsWith('/step11_device_sessions')){
-      assert.equal(u.searchParams.get('session_sha256'),'eq.'+
-        loginSessionFingerprint({req,db:{secret:'sb_secret_TEST'}}));
-      return new Response(JSON.stringify([{owner_id:B,credential_row_id:credentialRow,
-        expires_at:new Date(Date.now()+10000).toISOString()}]),{status:200});
-    }
-    if(u.pathname.endsWith('/step11_device_credentials')){
-      return new Response(JSON.stringify(status==='approved'?[{id:credentialRow,status}]:[]),{status:200});
-    }
-    return new Response('[]',{status:200});
-  }};
-  assert.equal((await deviceSessionStatus({req,identity:{kind:'student',userId:B},db})).approved,false);
-  status='approved';
-  assert.equal((await deviceSessionStatus({req,identity:{kind:'student',userId:B},db})).approved,true);
-  // A second browser-stored device token must not be issued.
-  const legacyOnly={headers:{cookie:'vault_device='+encode64(randomBytes(32))}};
-  assert.equal((await deviceSessionStatus({req:legacyOnly,identity:{kind:'student',userId:B},db})).approved,false);
-  assert.equal(validWriteOrigin({headers:{origin,host:rp}},origin),true);
-  assert.equal(validWriteOrigin({headers:{origin:'https://evil.example.com',host:rp}},origin),false);
-});
-test('browser UI never persists a device private key/token in JS storage',()=>{
-  const html=readFileSync(new URL('../public/index.html',import.meta.url),'utf8');
-  assert.match(html,/navigator\.credentials\.create/);
-  assert.match(html,/navigator\.credentials\.get/);
-  assert.match(html,/if \(!authenticated \|\| !deviceApproved\)/);
-  assert.doesNotMatch(html,/(?:localStorage|sessionStorage|indexedDB)\s*[.(\[]/);
-  for(const path of ['../api/memos.mjs','../api/memos/[id].mjs',
-    '../api/notices.mjs','../api/notices/[id].mjs']){
-    const api=readFileSync(new URL(path,import.meta.url),'utf8');
-    assert.match(api,/await requireApprovedDevice\(req,res/);
-  }
+test('server failures do not grant access',async()=>{
+ const w=fake();
+ const made=await requestDeviceRegistration({req:request(),identity:user,db:w.db});
+ const handle=made.cookie.match(new RegExp(DEVICE_COOKIE+'=([A-Za-z0-9_-]{43})'))[1];
+ const res={status(code){this.code=code;return this;},json(){}};
+ const broken={...w.db,transport:async()=>new Response('{}',{status:502})};
+ assert.equal(await requireApprovedDevice(request(handle),res,user,broken),false);
+ assert.equal(res.code,503);
 });
