@@ -1,4 +1,4 @@
-name: Step 11 verified-device app and regression submission
+name: Step 12 operations room and full regression submission
 
 on:
   push:
@@ -56,19 +56,21 @@ jobs:
         run: |
           npm run detect:test
           node --test test/step9.test.mjs
+      - name: 12 operations room redacted results and unrun checks
+        run: node --test test/step12-ops.test.mjs
       - name: XDR supplementary regression
         run: node --test test/xdr-run.test.mjs
       - name: Prepare excluded submission notes
         run: |
-          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"11단계: PWA manifest·아이콘·공개 오프라인 안내, 기기 승인 요청은 서버 발급 불투명 핸들만 HttpOnly 쿠키로 보관하고 DB에는 SHA-256 지문만 저장합니다. 새 기기는 pending부터 시작하며 별도 관리자 승인 시각이 요청 이후이고 7일 만료 전이며 소유자·해시가 일치할 때만 서버가 자료 접근을 허용합니다. 재확인 실패·오프라인에서는 메모 목록과 편집 내용을 즉시 지웁니다. 브라우저에서 기기 개인키·WebAuthn 패스키를 만들거나 JavaScript 저장소에 두지 않습니다. 기존 11단계 WebAuthn 방식의 실측은 이전 버전 증빙이며 새 서버 핸들 방식은 자동 테스트로 검증 중입니다. 신규 기기 승인 및 실제 배포 403/200 요청은 아직 실측 전이며, 승인 대기 중 자료 접근을 허용하지 않습니다. 10단계 통과 복원 경로와 1~9단계 규칙을 보존했습니다.",blockedAt:null},null,2)+"\n","utf8")'
+          node -e 'const fs=require("node:fs");fs.writeFileSync("bundle-notes.json",JSON.stringify({explanation:"12단계: 보호된 /api/ops와 탈환 작전실 화면을 추가했습니다. 1~11단계의 정상/금지 요청 자체 검증 계획 41칸 중 검증 가능한 안전한 GET 10종만 실제 프로덕션 HTTP 상태·요청 ID·시각으로 기록하고 나머지는 미실행으로 유지합니다. 기록은 서버 테이블 step12_ops_checks에 소유자별로 저장하며 쿠키·비밀키·사용자 정보·메모 본문은 저장하지 않습니다. 판정기 규칙 출처·탐지 원본/미실행·회수 미실행·복원 사본 메타데이터를 구분하고 화면 수치와 가린 로그를 동일한 DB 행에서 계산합니다. 학생 자체 HTTP 기대값 일치는 ALEPH 제공 엔진의 41종 공격 방어 또는 공식 심판 통과가 아닙니다. 기존 11단계 공식 100점 커밋과 1~10단계 기능을 보존했고, 단계 12 설정과 README 운영 안내를 갱신했습니다. 승인된 브라우저의 실제 10종 버튼 실측은 사용자 실행 후 확인합니다.",blockedAt:null},null,2)+"\n","utf8")'
       - name: Build submission bundle using live anonymous checks
         run: npm run bundle
-      - name: Check step 11 bundle contents
+      - name: Check step 12 bundle contents
         run: |
-          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==11||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==4)process.exit(1);console.log("STEP11",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
+          node -e 'const fs=require("node:fs");const x=JSON.parse(fs.readFileSync("artifacts/submission.json","utf8"));if(x.step!==12||x.restoreRoute!=="POST /api/restore/notes/:id"||!["device_registered","step_up_required","resource_zone"].every(a=>x.policyRules.includes(a))||x.attackAttempts.length!==6)process.exit(1);console.log("STEP12",x.commit.slice(0,12),"restoration",x.restoreRoute,"checks",x.attackAttempts.length)'
       - name: Archive submission JSON
         uses: actions/upload-artifact@v4
         with:
-          name: step11-submission
+          name: step12-submission
           path: artifacts/submission.json
           if-no-files-found: error
