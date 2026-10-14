@@ -1,3 +1,4 @@
+import {requireApprovedDevice} from '../../src/device-approval.mjs';
 import { authenticateNotice, dbHeaders, instructorAllowed, safeResponseHeaders, validWriteOrigin,
   jsonInput, validNotice, presentNotice, uuid } from '../../src/notice-access.mjs';
 
@@ -6,6 +7,7 @@ export default async function handler(req, res) {
   if (!['GET', 'PUT', 'DELETE'].includes(req.method)) return res.status(405).json({ error: 'method_not_allowed' });
   const state = await authenticateNotice(req, res);
   if (!state) return;
+  if (!await requireApprovedDevice(req,res,state.identity,{origin:process.env.SUPABASE_URL,secret:state.secret})) return;
   const id = req.query?.id;
   if (!uuid(id)) return res.status(400).json({ error: 'invalid_id' });
   if (req.method !== 'GET' && !validWriteOrigin(req)) return res.status(403).json({ error: 'invalid_origin' });
