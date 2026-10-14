@@ -103,7 +103,7 @@ test('expired or future-dated approvals remain denied even with a valid device h
  w.rows[0].status='approved';
  w.rows[0].approved_at=new Date(Date.now()+60000).toISOString();
  assert.equal((await deviceSessionStatus({req,identity:user,db:w.db})).approved,false);
- w.rows[0].approved_at=new Date(Date.now()-60000).toISOString();
+ w.rows[0].approved_at=new Date().toISOString();
  assert.equal((await deviceSessionStatus({req,identity:user,db:w.db})).approved,true);
  w.rows[0].expires_at=new Date(Date.now()-1000).toISOString();
  const expired=await deviceSessionStatus({req,identity:user,db:w.db});
